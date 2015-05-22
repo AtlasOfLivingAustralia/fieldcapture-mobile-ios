@@ -43,6 +43,12 @@
     locationManager.distanceFilter = kCLDistanceFilterNone; // whenever we move
     locationManager.desiredAccuracy = kCLLocationAccuracyBest;
     locationManager.delegate = self;
+    
+    // Check for iOS 8. Without this guard the code will crash with "unknown selector" on iOS 7.
+    if ([locationManager respondsToSelector:@selector(requestWhenInUseAuthorization)]) {
+        [locationManager requestWhenInUseAuthorization];
+    }
+
     [locationManager startUpdatingLocation];
     [self performSelector:@selector(gpsTimeout:) withObject:nil afterDelay:120];
 }

@@ -64,6 +64,10 @@
         locationMgr.distanceFilter = kCLDistanceFilterNone;
         locationMgr.desiredAccuracy = kCLLocationAccuracyHundredMeters;
         locationMgr.delegate = self;
+        // Check for iOS 8. Without this guard the code will crash with "unknown selector" on iOS 7.
+        if ([locationMgr respondsToSelector:@selector(requestWhenInUseAuthorization)]) {
+            [locationMgr requestWhenInUseAuthorization];
+        }
         [locationMgr startUpdatingLocation];
         
         UIRefreshControl *refresh = [[UIRefreshControl alloc] init];
@@ -113,6 +117,10 @@
     [appDelegate uploadAndDownload:false];
 }
 -(void) viewWillAppear:(BOOL)animated{
+    // Check for iOS 8. Without this guard the code will crash with "unknown selector" on iOS 7.
+    if ([locationMgr respondsToSelector:@selector(requestWhenInUseAuthorization)]) {
+        [locationMgr requestWhenInUseAuthorization];
+    }
     [locationMgr startUpdatingLocation];
 }
 

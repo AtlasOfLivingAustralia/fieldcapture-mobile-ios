@@ -9,8 +9,14 @@
 #ifndef GreenArmy_GASettingsConstant_h
 #define GreenArmy_GASettingsConstant_h
 
+/*
 #define kRESTProjectURL @"http://ecodata-test.ala.org.au/"
 #define kRESTActivitiesURL @"http://ecodata-test.ala.org.au/"
-#define kRESTActivitiesOutPutPOSTURL @"http://ecodata-test.ala.org.au/ws/activity/"
+#define kRESTActivitiesURL @"http://ecodata-test.ala.org.au/ws/activity/"
+*/
+
+//#define REST_SERVER @"https://fieldcapture-test.ala.org.au"
+#define REST_SERVER @"https://fieldcapture.ala.org.au"
+
 
 #endif

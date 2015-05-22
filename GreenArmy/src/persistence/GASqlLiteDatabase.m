@@ -8,6 +8,7 @@
 
 #import "GASqlLiteDatabase.h"
 #import "GAAppDelegate.h"
+#import "GASettingsConstant.h"
 
 @implementation GASqlLiteDatabase
 @synthesize db;
@@ -208,8 +209,9 @@
         NSString *result = [[NSString alloc] initWithUTF8String: ((char *)sqlite3_column_text(statement, index) != NULL) ? (char *)sqlite3_column_text(statement, index) : ""];
         activity.themes = [result componentsSeparatedByString:DB_THEME_SEPERATOR];
         //NSString *result = [activity.themes componentsJoinedByString:@"|,|"];
+
+        activity.url = [[NSString alloc] initWithFormat:@"%@/activity/enterData/%@?mobile=mobile",REST_SERVER,activity.activityId];
         
-        activity.url = [[NSString alloc] initWithFormat:@"http://fieldcapture-test.ala.org.au/activity/enterData/%@?mobile=mobile",activity.activityId];
         activity.site = [self getSiteBySiteId : sites : activity.siteId];
         [activities addObject:activity];
     }
