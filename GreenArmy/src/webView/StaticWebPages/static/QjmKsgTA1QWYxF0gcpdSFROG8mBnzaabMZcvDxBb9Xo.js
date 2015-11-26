@@ -412,6 +412,10 @@ function orEmptyArray(v) {
     return v === undefined ? [] : v;
 }
 
+function fixUrl(url) {
+    return typeof url == 'string' && url.indexOf("://") < 0? ("http://" + url): url;
+}
+
 function exists(parent, prop) {
     if(parent === undefined)
         return '';
@@ -567,21 +571,7 @@ function blockUIWithMessage(message) {
         } });
 }
 
-function confirmOnPageExit(e) {
-    // If we haven't been passed the event get the window.event
-    e = e || window.event;
 
-    var message = 'You have unsaved changes.';
-
-    // For IE6-8 and Firefox prior to version 4
-    if (e)
-    {
-        e.returnValue = message;
-    }
-
-    // For Chrome, Safari, IE8+ and Opera 12+
-    return message;
-};
 
 /**
  * Attaches a simple dirty flag (one shot change detection) to the supplied model, then once the model changes,
@@ -592,6 +582,10 @@ function confirmOnPageExit(e) {
  */
 function autoSaveModel(viewModel, saveUrl, options) {
 
+    var serializeModel = function() {
+        return (typeof viewModel.modelAsJSON === 'function') ? viewModel.modelAsJSON() : ko.toJSON(viewModel);
+    };
+
     var defaults = {
         storageKey:window.location.href+'.autosaveData',
         autoSaveIntervalInSeconds:60,
@@ -601,45 +595,106 @@ function autoSaveModel(viewModel, saveUrl, options) {
         errorMessage:"Failed to save your data: ",
         successMessage:"Save successful!",
         errorCallback:undefined,
-        successCallback:undefined
+        successCallback:undefined,
+        blockUIOnSave:false,
+        blockUISaveMessage:"Saving...",
+        blockUISaveSuccessMessage:"Save successful",
+        serializeModel:serializeModel,
+        pageExitMessage: 'You have unsaved data.  If you leave the page this data will be lost.',
+        preventNavigationIfDirty: false,
+        defaultDirtyFlag:ko.simpleDirtyFlag
     };
-
     var config = $.extend(defaults, options);
 
-    var serializeModel = function() {
-        return (typeof viewModel.modelAsJSON === 'function') ? viewModel.modelAsJSON() : ko.toJSON(viewModel);
+    var autosaving = false;
+
+    var deleteAutoSaveData = function() {
+        amplify.store(config.storageKey, null);
     };
+    var saveLocally = function(data) {
+        amplify.store(config.storageKey, data);
+    };
+
+
+    function confirmOnPageExit(e) {
+        // If we haven't been passed the event get the window.event
+        e = e || window.event;
+
+        // For IE6-8 and Firefox prior to version 4
+        if (e) {
+            e.returnValue = config.pageExitMessage;
+        }
+
+        // For Chrome, Safari, IE8+ and Opera 12+
+        return config.pageExitMessage;
+    };
+
+    var onunloadHandler = function(e) {
+        autosaving = false;
+        deleteAutoSaveData();
+
+        return confirmOnPageExit(e);
+    };
+
     var autoSaveModel = function() {
-        amplify.store(config.storageKey, serializeModel());
+        if (!autosaving) {
+            return;
+        }
+
         if (viewModel.dirtyFlag.isDirty()) {
+            amplify.store(config.storageKey, serializeModel());
             window.setTimeout(autoSaveModel, config.autoSaveIntervalInSeconds*1000);
         }
-    }
+    };
+
+    viewModel.cancelAutosave = function() {
+        autosaving = false;
+        deleteAutoSaveData();
+        if (config.preventNavigationIfDirty) {
+            window.onbeforeunload = null;
+        }
+    };
 
     if (typeof viewModel.dirtyFlag === 'undefined') {
-        viewModel.dirtyFlag = ko.simpleDirtyFlag(viewModel);
+        viewModel.dirtyFlag = config.defaultDirtyFlag(viewModel);
     }
     viewModel.dirtyFlag.isDirty.subscribe(
         function() {
             if (viewModel.dirtyFlag.isDirty()) {
-                autoSaveModel();
+                autosaving = true;
+
+                if (config.preventNavigationIfDirty) {
+                    window.onbeforeunload = onunloadHandler;
+                }
+                window.setTimeout(autoSaveModel, config.autoSaveIntervalInSeconds*1000);
+            }
+            else {
+                viewModel.cancelAutosave();
             }
         }
     );
 
     viewModel.saveWithErrorDetection = function(successCallback, errorCallback) {
+        if (config.blockUIOnSave) {
+            blockUIWithMessage(config.blockUISaveMessage);
+        }
         $(config.restoredDataWarningSelector).hide();
-        var json = serializeModel();
+
+        var json = config.serializeModel();
+
         // Store data locally in case the save fails.plan
         amplify.store(config.storageKey, json);
 
         return $.ajax({
-            url: saveUrl,
-            type: 'POST',
-            data: json,
-            contentType: 'application/json',
-            success: function (data) {
+                url: saveUrl,
+                type: 'POST',
+                data: json,
+                contentType: 'application/json'
+            }).done(function (data) {
                 if (data.error) {
+                    if (config.blockUIOnSave) {
+                        $.unblockUI();
+                    }
                     showAlert(config.errorMessage + data.detail + ' \n' + data.error,
                         "alert-error",config.resultsMessageId);
                     if (typeof errorCallback === 'function') {
@@ -650,8 +705,13 @@ function autoSaveModel(viewModel, saveUrl, options) {
                     }
 
                 } else {
-                    showAlert(config.successMessage,"alert-success",config.resultsMessageId);
-                    amplify.store(config.storageKey, null);
+                    if (config.blockUIOnSave) {
+                        blockUIWithMessage(config.blockUISaveSuccessMessage);
+                    }
+                    else {
+                        showAlert(config.successMessage, "alert-success", config.resultsMessageId);
+                    }
+                    viewModel.cancelAutosave();
                     viewModel.dirtyFlag.reset();
                     if (typeof successCallback === 'function') {
                         successCallback(data);
@@ -660,8 +720,11 @@ function autoSaveModel(viewModel, saveUrl, options) {
                         config.successCallback(data);
                     }
                 }
-            },
-            error: function (data) {
+            })
+            .fail(function (data) {
+                if (config.blockUIOnSave) {
+                    $.unblockUI();
+                }
                 bootbox.alert($(config.timeoutMessageSelector).html());
                 if (typeof errorCallback === 'function') {
                     errorCallback(data);
@@ -669,8 +732,8 @@ function autoSaveModel(viewModel, saveUrl, options) {
                 if (typeof config.errorCallback === 'function') {
                     config.errorCallback(data);
                 }
-            }
-        });
+            });
+
     }
 
 }
@@ -697,10 +760,195 @@ if (typeof Object.create !== 'function') {
     };
 }
 
+/**
+ * Document preview modes to content type 'map'
+ * @type {{convert: string[], pdf: string[], image: string[], audio: string[], video: string[]}}
+ */
+var contentTypes = {
+    convert: [
+        'application/msword',
+        'application/ms-excel',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.template',
+        'application/vnd.ms-word.document.macroEnabled.12',
+        'application/vnd.ms-word.template.macroEnabled.12',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.template',
+        'application/vnd.ms-excel.sheet.macroEnabled.12',
+        'application/vnd.ms-excel.template.macroEnabled.12',
+        'application/vnd.ms-excel.addin.macroEnabled.12',
+        'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.openxmlformats-officedocument.presentationml.template',
+        'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
+        'application/vnd.ms-powerpoint.addin.macroEnabled.12',
+        'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
+        'application/vnd.ms-powerpoint.template.macroEnabled.12',
+        'application/vnd.ms-powerpoint.slideshow.macroEnabled.12',
+        'application/vnd.oasis.opendocument.chart',
+        'application/vnd.oasis.opendocument.chart-template',
+        //'application/vnd.oasis.opendocument.database',
+        'application/vnd.oasis.opendocument.formula',
+        'application/vnd.oasis.opendocument.formula-template',
+        'application/vnd.oasis.opendocument.graphics',
+        'application/vnd.oasis.opendocument.graphics-template',
+        'application/vnd.oasis.opendocument.image',
+        'application/vnd.oasis.opendocument.image-template',
+        'application/vnd.oasis.opendocument.presentation',
+        'application/vnd.oasis.opendocument.presentation-template',
+        'application/vnd.oasis.opendocument.spreadsheet',
+        'application/vnd.oasis.opendocument.spreadsheet-template',
+        'application/vnd.oasis.opendocument.text',
+        'application/vnd.oasis.opendocument.text-master',
+        'application/vnd.oasis.opendocument.text-template',
+        'application/vnd.oasis.opendocument.text-web',
+        'text/html',
+        'text/plain'
+    ],
+    pdf: [
+        'application/pdf',
+        'text/pdf'
+    ],
+    image: [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'image/bmp'
+    ],
+    audio: [
+        'audio/webm',
+        'audio/ogg',
+        'audio/wave',
+        'audio/wav',
+        'audio/x-wav',
+        'audio/x-pn-wav',
+        'audio/mpeg',
+        'audio/mp3',
+        'audio/mp4'
+    ],
+    video: [
+        'video/webm',
+        'video/ogg',
+        'application/ogg',
+        'video/mp4'
+    ]
+};
+
 /** A function that works with documents.  Intended for inheritance by ViewModels */
+var mobileAppRoles = [
+    { role: "android", name: "Android" },
+    { role: "blackberry", name: "Blackberry" },
+    { role: "iTunes", name: "ITunes" },
+    { role: "windowsPhone", name: "Windows Phone" }
+];
+var socialMediaRoles = [
+    { role: "facebook", name: "Facebook" },
+    { role: "flickr", name: "Flickr" },
+    { role: "googlePlus", name: "Google+" },
+    { role: "instagram", name: "Instagram" },
+    { role: "linkedIn", name: "LinkedIn" },
+    { role: "pinterest", name: "Pinterest" },
+    { role: "rssFeed", name: "Rss Feed" },
+    { role: "tumblr", name: "Tumblr" },
+    { role: "twitter", name: "Twitter" },
+    { role: "vimeo", name: "Vimeo" },
+    { role: "youtube", name: "You Tube" }
+];
 function Documents() {
     var self = this;
     self.documents = ko.observableArray();
+    self.documentFilter = ko.observable('');
+    self.documentFilterFieldOptions = [{ label: 'Name', fun: 'name'}, { label: 'Attribution', fun: 'attribution' }, { label: 'Type', fun: 'type' }];
+    self.documentFilterField = ko.observable(self.documentFilterFieldOptions[0]);
+
+    self.selectedDocument = ko.observable();
+
+    function listContains(list, value) {
+        return list.indexOf(value) > -1;
+    }
+
+    self.previewTemplate = ko.pureComputed(function() {
+        var selectedDoc = self.selectedDocument();
+
+        var val;
+        if (selectedDoc) {
+            var contentType = (selectedDoc.contentType() || 'application/octet-stream').toLowerCase().trim();
+            var embeddedVideo = selectedDoc.embeddedVideo();
+            if (embeddedVideo) {
+                val = "xssViewer";
+            } else if (listContains(contentTypes.convert.concat(contentTypes.audio, contentTypes.video, contentTypes.image, contentTypes.pdf), contentType)) {
+                val = "iframeViewer";
+            } else {
+                val = "noPreviewViewer";
+            }
+        } else {
+            val = "noViewer";
+        }
+        return val;
+    });
+
+    self.selectedDocumentFrameUrl = ko.computed(function() {
+        var selectedDoc = self.selectedDocument();
+
+        var val;
+        if (selectedDoc) {
+            var contentType = (selectedDoc.contentType() || 'application/octet-stream').toLowerCase().trim();
+            //return (selectedDoc && selectedDoc.url) ? "https://docs.google.com/viewer?url="+encodeURIComponent(selectedDoc.url)+"&embedded=true" : '';
+
+            if (listContains(contentTypes.pdf, contentType)) {
+                val = fcConfig.pdfViewer + '?file=' + encodeURIComponent(selectedDoc.url);
+            } else if (listContains(contentTypes.convert, contentType)) {
+
+              // jq promises are fundamentally broken, so...
+              val = $.Deferred(function(dfd) {
+                $.get(fcConfig.pdfgenUrl, {"file": selectedDoc.url }, $.noop, "json")
+                  .promise()
+                  .done(function(data) {
+                    dfd.resolve(fcConfig.pdfViewer + '?file=' + encodeURIComponent(data.location));
+                  })
+                  .fail(function(jqXHR, textStatus, errorThrown) {
+                    console.warn('get pdf failed', jqXHR, textStatus, errorThrown);
+                    dfd.resolve(fcConfig.errorViewer || '');
+                  })
+              }).promise();
+            } else if (listContains(contentTypes.image, contentType)) {
+                val = fcConfig.imgViewer + '?file=' + encodeURIComponent(selectedDoc.url);
+            } else if (listContains(contentTypes.video, contentType)) {
+                val = fcConfig.videoViewer + '?file=' + encodeURIComponent(selectedDoc.url);
+            } else if (listContains(contentTypes.audio, contentType)) {
+                val = fcConfig.audioViewer + '?file=' + encodeURIComponent(selectedDoc.url);
+            } else {
+                //val = fcConfig.noViewer + '?file='+encodeURIComponent(selectedDoc.url);
+                val = '';
+            }
+        } else {
+            val = '';
+        }
+        return val;
+    }).extend({async: ''});
+
+    self.filteredDocuments = ko.pureComputed(function() {
+        var lcFilter = self.documentFilter().trim().toLowerCase();
+        var field = self.documentFilterField();
+        return ko.utils.arrayFilter(self.documents(), function(doc) {
+            return (doc[field.fun]() || '').toLowerCase().indexOf(lcFilter) !== -1;
+        });
+    });
+
+    self.showListItem = function(element, index, data) {
+        var $elem = $(element);
+        $elem.hide(); // element is visible after render, so hide it to animate it appearing.
+        $elem.show(100);
+    };
+
+    self.hideListItem = function(element, index, data) {
+        $(element).hide(100);
+    };
+
     self.findDocumentByRole = function(documents, roleToFind) {
         for (var i=0; i<documents.length; i++) {
             var role = ko.utils.unwrapObservable(documents[i].role);
@@ -711,6 +959,86 @@ function Documents() {
         }
         return null;
     };
+
+    self.links = ko.observableArray();
+    self.findLinkByRole = function(links, roleToFind) {
+        for (var i=0; i<links.length; i++) {
+            var role = ko.utils.unwrapObservable(links[i].role);
+            if (role === roleToFind) return links[i];
+        }
+        return null;
+    };
+    self.addLink = function(role, url) {
+        self.links.push(new DocumentViewModel({
+            role: role,
+            url: url
+        }));
+    };
+    self.fixLinkDocumentIds = function(existingLinks) {
+        // match up the documentId for existing link roles
+        var existingLength = existingLinks? existingLinks.length: 0;
+        if (!existingLength) return;
+        $.each(self.links(), function(i, link) {
+            var role = ko.utils.unwrapObservable(link.role);
+            for (i = 0; i < existingLength; i++)
+                if (existingLinks[i].role === role) {
+                    link.documentId = existingLinks[i].documentId;
+                    return;
+                }
+        });
+    };
+    function pushLinkUrl(urls, links, role) {
+        var link = self.findLinkByRole(links, role.role);
+        if (link) urls.push({
+            link: link,
+            name: role.name,
+            role: role.role,
+            remove: function() {
+              self.links.remove(link);
+            },
+            logo: function(dir) {
+                return dir + "/" + role.role.toLowerCase() + ".png";
+            }
+        });
+    }
+
+    self.transients = {};
+
+    self.transients.mobileApps = ko.pureComputed(function() {
+        var urls = [], links = self.links();
+        for (var i = 0; i < mobileAppRoles.length; i++)
+            pushLinkUrl(urls, links, mobileAppRoles[i]);
+        return urls;
+    });
+    self.transients.mobileAppsUnspecified = ko.pureComputed(function() {
+        var apps = [], links = self.links();
+        for (var i = 0; i < mobileAppRoles.length; i++)
+        if (!self.findLinkByRole(links, mobileAppRoles[i].role))
+            apps.push(mobileAppRoles[i]);
+        return apps;
+    });
+    self.transients.mobileAppToAdd = ko.observable();
+    self.transients.mobileAppToAdd.subscribe(function(role) {
+        if (role) self.addLink(role, "");
+    });
+    self.transients.socialMedia = ko.pureComputed(function() {
+        var urls = [], links = self.links();
+        for (var i = 0; i < socialMediaRoles.length; i++)
+            pushLinkUrl(urls, links, socialMediaRoles[i]);
+        return urls;
+    });
+    self.transients.socialMediaUnspecified = ko.pureComputed(function() {
+        var apps = [], links = self.links();
+        for (var i = 0; i < socialMediaRoles.length; i++)
+            if (!self.findLinkByRole(links, socialMediaRoles[i].role))
+                apps.push(socialMediaRoles[i]);
+        return apps;
+    });
+    self.transients.socialMediaToAdd = ko.observable();
+    self.transients.socialMediaToAdd.subscribe(function(role) {
+        if (role) self.addLink(role, "");
+    });
+
     self.logoUrl = ko.pureComputed(function() {
         var logoDocument = self.findDocumentByRole(self.documents(), 'logo');
         return logoDocument ? logoDocument.url : null;
@@ -742,28 +1070,23 @@ function Documents() {
     };
 
     // this supports display of the project's primary images
-    this.primaryImages = ko.computed(function () {
+    self.primaryImages = ko.computed(function () {
         var pi = $.grep(self.documents(), function (doc) {
             return ko.utils.unwrapObservable(doc.isPrimaryProjectImage);
         });
         return pi.length > 0 ? pi : null;
     });
 
-    var allowedHost = ['fast.wistia.com','embed-ssl.ted.com', 'www.youtube.com', 'player.vimeo.com'];
-    this.embeddedVideos = ko.computed(function () {
+
+    self.embeddedVideos = ko.computed(function () {
         var ev = $.grep(self.documents(), function (doc) {
             var isPublic = ko.utils.unwrapObservable(doc.public);
             var embeddedVideo = ko.utils.unwrapObservable(doc.embeddedVideo);
             if(isPublic && embeddedVideo) {
-                var html = $.parseHTML(embeddedVideo);
-                for(var i = 0; i < html.length; i++){
-                    var element = html[i];
-                    var src = element.getAttribute('src');
-                    if(src && $.inArray(getHostName(src), allowedHost) > -1){
-                        doc.iframe = '<iframe width="100%" src ="' + src + '" height = "' + element.getAttribute("height") + '"/></iframe>';
-                        return doc;
-                    }
-                    break;
+                var iframe = buildiFrame(embeddedVideo);
+                if(iframe){
+                    doc.iframe = iframe;
+                    return doc;
                 }
             }
         });
@@ -783,13 +1106,321 @@ function Documents() {
         }
     };
 
-    self.ignore = ['documents', 'logoUrl', 'bannerUrl', 'mainImageUrl', 'primaryImages', 'embeddedVideos'];
+    self.ignore = ['documents', 'links', 'logoUrl', 'bannerUrl', 'mainImageUrl', 'primaryImages', 'embeddedVideos',
+      'ignore', 'transients', 'documentFilter', 'documentFilterFieldOptions', 'documentFilterField', 'previewTemplate',
+      'selectedDocumentFrameUrl', 'filteredDocuments'];
 
+}
+
+/**
+ * Wraps a list in a fuse search and exposes results and selection as knockout variables.
+ * Make sure to require Fuse on any page using this.
+ */
+SearchableList = function(list, keys, options) {
+
+    var self = this;
+    var options = $.extend({keys:keys, maxPatternLength:64}, options || {});
+
+    var searchable = new Fuse(list, options);
+
+    self.term = ko.observable();
+    self.selection = ko.observable();
+
+    self.results = ko.computed(function() {
+        if (self.term()) {
+            var searchTerm = self.term();
+            if (searchTerm > options.maxPatternLength) {
+                searchTerm = searchTerm.substring(0, options.maxPatternLength);
+            }
+            return searchable.search(searchTerm);
+        }
+        return list;
+    });
+
+    self.select = function(value) {
+        self.selection(value);
+    };
+    self.clearSelection = function() {
+        self.selection(null);
+        self.term(null);
+    };
+    self.isSelected = function(value) {
+        if (!self.selection() || !value) {
+            return false;
+        }
+        for (var i=0; i<keys.length; i++) {
+            var selection = self.selection();
+            if (selection[keys[i]] != value[keys[i]]) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+function isUrlAndHostValid(url) {
+    var allowedHost = ['fast.wistia.com','embed-ssl.ted.com', 'www.youtube.com', 'player.vimeo.com'];
+    return (url && isUrlValid(url) && $.inArray(getHostName(url), allowedHost) > -1)
+};
+
+function isUrlValid(url) {
+    return /^(https?|s?ftp):\/\/(((([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(%[\da-f]{2})|[!\$&'\(\)\*\+,;=]|:)*@)?(((\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5]))|((([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))\.)+(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))\.?)(:\d*)?)(\/((([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(%[\da-f]{2})|[!\$&'\(\)\*\+,;=]|:|@)+(\/(([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(%[\da-f]{2})|[!\$&'\(\)\*\+,;=]|:|@)*)*)?)?(\?((([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(%[\da-f]{2})|[!\$&'\(\)\*\+,;=]|:|@)|[\uE000-\uF8FF]|\/|\?)*)?(#((([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(%[\da-f]{2})|[!\$&'\(\)\*\+,;=]|:|@)|\/|\?)*)?$/i.test(url);
+};
+
+function getHostName(href) {
+    var l = document.createElement("a");
+    l.href = href;
+    return l.hostname;
+};
+
+function buildiFrame(embeddedVideo){
+    var html = $.parseHTML(embeddedVideo);
+    var iframe = "";
+    if(html){
+        for(var i = 0; i < html.length; i++){
+            var element = html[i];
+            var attr = $(element).attr('src');
+            if(typeof attr !== typeof undefined && attr !== false){
+                var height =  element.getAttribute("height") ?  element.getAttribute("height") : "315";
+                iframe = isUrlAndHostValid(attr)  ? '<iframe width="100%" src ="' +  attr + '" height = "' + height + '"/></iframe>' : "";
+            }
+            return iframe;
+        }
+    }
+    return iframe;
+};
+
+function showFloatingMessage(message, alertType) {
+    if (!alertType) {
+        alertType = 'alert-success';
+    }
+
+    var messageContainer = $('<div id="alertdiv" style="display:none; margin:0;" class="alert ' +  alertType + '"><a class="close" data-dismiss="alert">×</a><span>'+message+'</span></div>');
+
+    setTimeout(function() { // this will automatically close the alert and remove this if the users doesnt close it in 5 secs
+        messageContainer.slideUp(400, function() {messageContainer.remove();});
+    }, 5000);
+
+    if ($('.navbar').is(':appeared')) {
+        // attach below navbar
+        $('#content').prepend(messageContainer);
+
+    }
+    else {
+        // attach to top
+        messageContainer.css("position", "fixed");
+        messageContainer.width('100%');
+        messageContainer.css("top", 0);
+        messageContainer.css("left", 0);
+
+        $('body').append(messageContainer);
+
+    }
+    messageContainer.slideDown(400);
+};
+
+/**
+ * Format a date given an Unix time number (output of Date.parse)
+ *
+ * @param t
+ * @returns {string}
+ */
+function formatDate(t) {
+    var d = new Date(t);
+    var yyyy = d.getFullYear().toString();
+    var mm = (d.getMonth()+1).toString(); // getMonth() is zero-based
+    var dd  = d.getDate().toString();
+    return yyyy + "-" + (mm[1]?mm:"0"+mm[0]) + "-" + (dd[1]?dd:"0"+dd[0]);
 };
 
 
 
+var BlogViewModel = function(entries, type) {
+    var self = this;
+    self.entries = ko.observableArray();
 
+    for (var i=0; i<entries.length; i++) {
+        if (!type || entries[i].type == type) {
+            self.entries.push(new BlogEntryViewModel(entries[i]));
+        }
+    }
+};
+
+var BlogEntryViewModel = function(blogEntry) {
+    var self = this;
+    var now = convertToSimpleDate(new Date());
+    self.blogEntryId = ko.observable(blogEntry.blogEntryId);
+    self.projectId = ko.observable(blogEntry.projectId);
+    self.title = ko.observable(blogEntry.title || '');
+    self.date = ko.observable(blogEntry.date || now).extend({simpleDate:false});
+    self.content = ko.observable(blogEntry.content).extend({markdown:true});
+    self.stockIcon = ko.observable(blogEntry.stockIcon);
+    self.documents = ko.observableArray(blogEntry.documents || []);
+    self.viewMoreUrl = ko.observable(blogEntry.viewMoreUrl);
+    self.image = ko.computed(function() {
+        return self.documents()[0];
+    });
+    self.type = ko.observable();
+    self.formattedDate = ko.computed(function() {
+        return moment(self.date()).format('Do MMM')
+    });
+    self.shortContent = ko.computed(function() {
+        var content = self.content() || '';
+        if (content.length > 60) {
+            content = content.substring(0, 100)+'...';
+        }
+        return content;
+    });
+    self.imageUrl = ko.computed(function() {
+        if (self.image()) {
+            return self.image().url;
+        }
+    });
+};
+
+var EditableBlogEntryViewModel = function(blogEntry, options) {
+
+    var defaults = {
+        validationElementSelector:'.validationEngineContainer',
+        types:['News and Events', 'Project Stories'],
+        returnTo:fcConfig.returnTo,
+        blogUpdateUrl:fcConfig.blogUpdateUrl
+    };
+    var config = $.extend(defaults, options);
+    var self = this;
+    var now = convertToSimpleDate(new Date());
+    self.blogEntryId = ko.observable(blogEntry.blogEntryId);
+    self.projectId = ko.observable(blogEntry.projectId || undefined);
+    self.title = ko.observable(blogEntry.title || '');
+    self.date = ko.observable(blogEntry.date || now).extend({simpleDate:false});
+    self.content = ko.observable(blogEntry.content);
+    self.stockIcon = ko.observable(blogEntry.stockImageName);
+    self.documents = ko.observableArray();
+    self.image = ko.observable();
+    self.type = ko.observable();
+    self.viewMoreUrl = ko.observable(blogEntry.viewMoreUrl).extend({url:true});
+
+    self.imageUrl = ko.computed(function() {
+        if (self.image()) {
+            return self.image().url;
+        }
+    });
+    self.imageId = ko.computed(function() {
+        if (self.image()) {
+           return self.image().documentId;
+        }
+    });
+    self.documents.subscribe(function() {
+        if (self.documents()[0]) {
+           self.image(new DocumentViewModel(self.documents()[0]));
+        }
+        else {
+            self.image(undefined);
+        }
+    });
+    self.removeBlogImage = function() {
+        self.documents([]);
+    };
+
+    self.modelAsJSON = function() {
+        var js = ko.mapping.toJS(self, {ignore:['transients', 'documents', 'image', 'imageUrl']});
+        if (self.image()) {
+            js.image = self.image().modelForSaving();
+        }
+        return JSON.stringify(js);
+    };
+
+    self.editContent = function() {
+        editWithMarkdown('Blog content', self.content);
+    };
+
+    self.save = function() {
+        if ($(config.validationElementSelector).validationEngine('validate')) {
+            self.saveWithErrorDetection(function() {document.location.href = config.returnTo});
+        }
+    };
+
+    self.cancel = function() {
+        document.location.href = config.returnTo;
+    };
+
+    self.transients = {};
+    self.transients.blogEntryTypes = config.types;
+
+    if (blogEntry.documents && blogEntry.documents[0]) {
+        self.documents.push(blogEntry.documents[0]);
+    }
+    $(config.validationElementSelector).validationEngine();
+    autoSaveModel(self, config.blogUpdateUrl, {blockUIOnSave:true});
+};
+
+var BlogSummary = function(blogEntries) {
+    var self = this;
+    self.entries = ko.observableArray();
+
+    self.load = function(entries) {
+        self.entries($.map(entries, function(blogEntry) {
+            return new BlogEntryViewModel(blogEntry);
+        }));
+    };
+
+    self.newBlogEntry = function() {
+        document.location.href = fcConfig.createBlogEntryUrl;
+    };
+    self.deleteBlogEntry = function(entry) {
+        var url = fcConfig.deleteBlogEntryUrl+'&id='+entry.blogEntryId();
+        $.post(url).done(function() {
+            document.location.reload();
+        });
+    };
+    self.editBlogEntry = function(entry) {
+        document.location.href = fcConfig.editBlogEntryUrl+'&id='+entry.blogEntryId();
+    };
+    self.load(blogEntries);
+};
+
+
+/**
+ * Animates the replacement of an element with a new element obtained via an ajax (GET) call.
+ * @param contentSelector identifies the element to replace.
+ * @param url the URL to call to get the replacement content.
+ * @returns a promise that will complete when the content is replaced.
+ */
+function replaceContentSection(contentSelector, url) {
+
+    var $existingContent = $(contentSelector);
+    var $parent = $existingContent.parent();
+
+    var newStats;
+
+    var animation = $.Deferred();
+    $existingContent.slideUp(400, function() {
+        $existingContent.remove();
+        animation.resolve();
+    });
+
+    var ajax = $.get(url).done(function(data) {
+        newStats = $(data);
+    });
+
+    return $.when(animation, ajax).done(function() {
+        newStats.hide().appendTo($parent).slideDown();
+    });
+}
+
+$(function() {
+    $('#logout-btn').click(function() {
+        if (window.localStorage) {
+            window.localStorage.setItem('logout', new Date().getTime());
+        }
+    });
+    $('#logout-warning a').click(function(){ $('#logout-warning').hide(); });
+    window.addEventListener('storage', function(e) {
+        if (e.key == 'logout') {
+            $('#logout-warning').show();
+        }
+    });
+});
 /*
  * Copyright (c) 2013 Viral Patel
  * http://viralpatel.net
@@ -2152,5 +2783,69 @@ CONFIRM:"\u041f\u0440\u0438\u043c\u0435\u043d\u0438\u0442\u044c"},it:{OK:"OK",CA
 	}
 
 })();
+
+var PaginationViewModel = function (o, caller) {
+    var self = this;
+    if (!o) o = {};
+    if (!caller) caller = self;
+    self.rppOptions = [10, 20, 30, 50, 100];
+    self.resultsPerPage = ko.observable(self.rppOptions[0]);
+    self.totalResults = ko.observable();
+    self.currentPage = ko.observable();
+    self.start = ko.observable();
+
+    self.lastPage = ko.pureComputed(function() {
+        return Math.ceil((self.totalResults() / self.resultsPerPage()));
+    });
+
+    self.info = ko.computed(function () {
+        if (self.totalResults() > 0) {
+            self.start(self.calculatePageOffset(self.currentPage()) + 1);
+            var end = Math.min(self.totalResults(), self.start() + self.resultsPerPage() - 1);
+            return "Showing " + self.start() + " to " + end + " of " + self.totalResults();
+        }
+    });
+
+    self.showPagination = ko.computed(function () {
+        return self.totalResults() > 0
+    }, this);
+
+    self.calculatePageOffset = function (currentPage) {
+        return currentPage < 1 ? 0 : (currentPage - 1) * self.resultsPerPage();
+    };
+
+    self.next = function () {
+        caller.refreshPage(self.calculatePageOffset(self.currentPage() + 1));
+        self.currentPage(self.currentPage() + 1);
+    };
+
+    self.previous = function () {
+        caller.refreshPage(self.calculatePageOffset(self.currentPage() - 1));
+        self.currentPage(self.currentPage() - 1);
+    };
+
+    self.first = function () {
+        caller.refreshPage(0);
+        self.currentPage(0)
+    };
+
+    self.last = function () {
+        caller.refreshPage(self.calculatePageOffset(Math.ceil((self.totalResults() / self.resultsPerPage()))));
+        self.currentPage(self.lastPage());
+    };
+
+    self.resultsPerPage.subscribe(function () {
+        caller.refreshPage(0);
+    });
+
+    self.refreshPage = function (rp) {
+        // Do nothing.
+    };
+
+    self.loadPagination = function (page, total) {
+        self.totalResults(total);
+        self.currentPage(page < 1 ? 1 : page);
+    };
+};
 
 

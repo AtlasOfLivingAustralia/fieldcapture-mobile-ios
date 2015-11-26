@@ -56,7 +56,7 @@
     [request setValue:JSON_CONTENT_TYPE_VALUE forHTTPHeaderField:JSON_CONTENT_TYPE_KEY];
     [request setValue:[GASettings getEmailAddress] forHTTPHeaderField:@"userName"];
     [request setValue:[GASettings getAuthKey] forHTTPHeaderField:@"authKey"];
-    [request setHTTPBody:[activity.activityJSON dataUsingEncoding:NSASCIIStringEncoding]];
+    [request setHTTPBody:[activity.activityJSON dataUsingEncoding:NSUTF8StringEncoding]];
     
     NSURLResponse *response;
     NSData *POSTReply = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&*e];
@@ -237,7 +237,7 @@
         [request setValue:JSON_CONTENT_TYPE_VALUE forHTTPHeaderField:JSON_CONTENT_TYPE_KEY];
         [request setValue:[GASettings getEmailAddress] forHTTPHeaderField:@"userName"];
         [request setValue:[GASettings getAuthKey] forHTTPHeaderField:@"authKey"];
-        [request setHTTPBody:[postStr dataUsingEncoding:NSASCIIStringEncoding]];
+        [request setHTTPBody:[postStr dataUsingEncoding:NSUTF8StringEncoding]];
        
         NSURLResponse *response;
         NSData *POSTReply = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&*e];

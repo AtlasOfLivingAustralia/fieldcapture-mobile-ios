@@ -48,6 +48,7 @@
     [self authenticate];
 }
 - (IBAction)onClickRegister:(id)sender{
+    //TODO: Render the webpage under the webview modal.
     [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://auth.ala.org.au/userdetails/registration/createAccount"]];
 }
 
