@@ -30,8 +30,6 @@
 @implementation GARestCall
 #define JSON_CONTENT_TYPE_VALUE @"application/json;charset=UTF-8"
 #define JSON_CONTENT_TYPE_KEY @"Content-Type"
-//#define REST_SERVER @"https://fieldcapture-test.ala.org.au"
-//#define REST_SERVER @"https://fieldcapture.ala.org.au"
 
 @synthesize projects,  urlId, restRequestCounter, restResponseCounter;
 

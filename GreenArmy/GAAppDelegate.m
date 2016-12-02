@@ -24,7 +24,7 @@
 @end
 @implementation GAAppDelegate
 
-@synthesize splitViewController, projects,masterProjectVC, detailVC, restCall, sqlLite, loginViewController, eulaVC;
+@synthesize splitViewController, projects,masterProjectVC, detailVC, restCall, sqlLite, loginViewController, eulaVC, gaUtil;
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
@@ -39,6 +39,7 @@
     //Singleton instantiation.
     restCall = [[GARestCall alloc]init];
     sqlLite = [[GASqlLiteDatabase alloc] init];
+    gaUtil = [[GAUtil alloc] init];
 
     [self addSplitViewtoRoot];
     

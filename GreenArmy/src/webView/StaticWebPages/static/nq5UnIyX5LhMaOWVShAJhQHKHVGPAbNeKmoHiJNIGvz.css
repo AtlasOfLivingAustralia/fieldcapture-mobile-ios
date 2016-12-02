@@ -987,3 +987,48 @@ input[type="checkbox"] { -webkit-appearance: checkbox; !important }
     height: 7em;
 }
 
+.organisation-logo {
+    width: 200px;
+    height: 150px;
+    margin-right: 10px;
+    overflow: hidden;
+    padding: 1px;
+    float:left;
+}
+.organisation-logo img {
+    vertical-align: top;
+}
+
+.organisation-text {
+    margin-left: 220px;
+    margin-top: 5px;
+}
+
+.organisation-text h4 {
+    clear: none;
+    margin-top: 0;
+}
+
+
+/* Allow divs to masquerade as a in nav lists */
+.nav-list > li > div {
+    padding: 3px 15px;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.nav > li > div:hover {
+    text-decoration: none;
+    background-color: #dcdcdc;
+}
+
+.nav-list > .active > div, .nav-list > .active > div:hover, .nav-list > .active > div:focus {
+    color: #fff;
+    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.2);
+    background-color: #006699;
+}
+
+.nav-list > .active i {
+    color: #ffffff;
+}
+
+

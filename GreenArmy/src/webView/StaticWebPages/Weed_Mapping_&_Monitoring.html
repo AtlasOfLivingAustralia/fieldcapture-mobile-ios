@@ -16,15 +16,15 @@
 <link href="static/AcXIjLTuc87n8sfxBjJRQSoBIUwP9RnCyK8Sv82i7eV.css" type="text/css" rel="stylesheet" media="screen, projection" />
 <link href="static/doSKUivnfI9gXmPKZ2XG4W5xIABYgKaf5Dwf3LtjNVr.css" type="text/css" rel="stylesheet" media="screen, projection" />
 <link href="static/fx5pGfEFSRJi6nyez3s8fUsjDL8WJ0IB04Njm7T2VAJ.css" type="text/css" rel="stylesheet" media="all" />
-<link href="static/iHX8x0PqEmsjgyBEeq6NRvjAytsYzmt25tsjtHoHXDq.css" type="text/css" rel="stylesheet" media="screen,print" />
+<link href="static/qBQAxqnczDqd7Bl7B2gXgLoB51xIPPVo3q06lXUPLcy.css" type="text/css" rel="stylesheet" media="screen,print" />
 
 
 
 
 <link href="static/KYGDEVRRaKjNbTXJkHmicmzo9vFrnnzCnGLcxKjR04f.css" type="text/css" rel="stylesheet" media="screen,print" />
 
-<link href="static/exPgH85S7hDuxmySlOZhM0sayvRJla83G3HHYJNzaUB.css" type="text/css" rel="stylesheet" media="screen,print" />
-<link href="static/tNjfADEdRvZz6orXSyopLhQhlHwq7bH7hcAZQiGZMoc.css" type="text/css" rel="stylesheet" media="screen, projection" />
+<link href="static/KtHosYDw6qHDklqhUqI9Y0lrV4QlbtokVSWtoN5CyvP.css" type="text/css" rel="stylesheet" media="screen,print" />
+<link href="static/nq5UnIyX5LhMaOWVShAJhQHKHVGPAbNeKmoHiJNIGvz.css" type="text/css" rel="stylesheet" media="screen, projection" />
 <link href="/static/RrjzrZ0Ci0GPLETIr8x8KUMjfJtZKvifrUtMCedwKRB.png" rel="shortcut icon" />
 <link href="static/4zsVqykqBON8U5Es5kfffXBSGJlbI8VrPDW4hSn1SWJ.css" type="text/css" rel="stylesheet" media="screen, projection" />
 
@@ -41,7 +41,7 @@
 <script type="text/javascript">
     var fcConfig = {
         bieUrl: "#",
-        speciesProfileUrl: "https://fieldcapture-test.ala.org.au/proxy/speciesProfile",
+        speciesProfileUrl: "https://fieldcapture.ala.org.au/proxy/speciesProfile",
         googleStaticUrl:"http://maps.googleapis.com/maps/api/staticmap?maptype=terrian&zoom=12&sensor=false&size=350x250&markers=color:red%7C"
         },
         here = document.location.href;
@@ -111,7 +111,7 @@
 
                         <div class="span6 required">
                             <label for="startDate"><b>Actual start date</b>
-                                <a href='#' class='helphover' data-original-title='Start date' data-placement='top' data-content='Date the activity was started.'>
+                                <a href='#' class='helphover' data-original-title='' data-placement='top' data-content='Date the activity was started.'>
   <i class='icon-question-sign'>&nbsp;</i>
 </a>
                             </label>
@@ -127,7 +127,7 @@
                         </div>
                         <div class="span6" data-bind="css:{required:transients.markedAsFinished}">
                             <label for="endDate"><b>Actual end date</b>
-                                <a href='#' class='helphover' data-original-title='End date' data-placement='top' data-content='Date the activity finished.'>
+                                <a href='#' class='helphover' data-original-title='' data-placement='top' data-content='Date the activity finished.'>
   <i class='icon-question-sign'>&nbsp;</i>
 </a>
                             </label>
@@ -233,6 +233,9 @@
 
         </div>
         
+
+
+        
     </div>
     
 
@@ -273,7 +276,7 @@
                 <script id="weedObservationMonitoringDetailsviewTmpl" type="text/html"><tr>
                     <td>
 <span class="input-prepend input-append" data-bind="with:weedSpecies">
-    <span class="add-on" data-bind="visible:!transients.editing(), css:{'btn-success':name()}"><i class="icon-white" data-bind="css:{'icon-ok':listId()!='unmatched' && name(), 'icon-question-sign':listId()=='unmatched' || listId() == 'error-unmatched'}"></i></span><span class="add-on" data-bind="visible:transients.editing()"><img src="static/Xo2jbaJ5EFqa59u9g4c4ybpCpw3wFWKhQdzZwNmmktO.gif" alt="saving icon" /></span><input type="text" data-bind="value:transients.textFieldValue,event:{focusout:focusLost},autocomplete:{url:'https://fieldcapture-test.ala.org.au/search/species', render: renderItem, listId: list, result:speciesSelected, valueChangeCallback:textFieldChanged}"  data-validation-engine='validate[required]'/>
+    <span class="add-on" data-bind="visible:!transients.editing(), css:{'btn-success':name()}"><i class="icon-white" data-bind="css:{'icon-ok':listId()!='unmatched' && name(), 'icon-question-sign':listId()=='unmatched' || listId() == 'error-unmatched'}"></i></span><span class="add-on" data-bind="visible:transients.editing()"><img src="static/Xo2jbaJ5EFqa59u9g4c4ybpCpw3wFWKhQdzZwNmmktO.gif" alt="saving icon" /></span><input type="text" data-bind="value:transients.textFieldValue,event:{focusout:focusLost},autocomplete:{url:'https://fieldcapture.ala.org.au/search/species', render: renderItem, listId: list, result:speciesSelected, valueChangeCallback:textFieldChanged}"  data-validation-engine='validate[required]'/>
     <span class="add-on" data-bind="visible: !transients.editing() && name()">
         <a href="#" data-bind="popover: {title: name, content: transients.speciesInformation}"><i class="icon-info-sign"></i></a>
     </span>
@@ -298,6 +301,9 @@
 
         </div>
         
+
+
+        
     </div>
     
 
@@ -314,14 +320,14 @@
         <!-- add the dynamic components -->
             <div class="row-fluid space-after output-section" >
 <div class="span4">
-<div class="row-fluid"><span class="span12">    <span  class="span4 preLabel required"><label>No. of participants (ie. not employed on project):<a href='#' class='helphover' data-original-title='' data-placement='top' data-content='The number of people involved in an activity who are not delivery partners or employed in the project. These would typically be the volunteer participants.'>
+<div class="row-fluid"><span class="span12">    <span  class="span4 preLabel required"><label>Total no. of participants (ie. not employed on project):<a href='#' class='helphover' data-original-title='' data-placement='top' data-content='The total number of people involved in an activity who are not delivery partners or employed in the project. These would typically be the volunteer participants and/or event attendees.'>
   <i class='icon-question-sign'>&nbsp;</i>
 </a></label></span><input class="input-small" style="text-align:center" data-bind='value:data.totalParticipantsNotEmployed' data-validation-engine='validate[required,min[0],custom[number]]' type='number' class='input-mini'/></span></div><div class="row-fluid"><span class="span12">    <span  class="span4 preLabel required"><label>No. of Indigenous participants (ie. not employed on project):<a href='#' class='helphover' data-original-title='' data-placement='top' data-content='The number of indigenous people participating in an activity who are not delivery partners or employed in the project (ie. Indigenous volunteers)'>
   <i class='icon-question-sign'>&nbsp;</i>
 </a></label></span><input class="input-small" style="text-align:center" data-bind='value:data.numberOfIndigenousParticipants' data-validation-engine='validate[required,min[0],custom[number]]' type='number' class='input-mini'/></span></div></div><div class="span4">
 <div class="row-fluid"><span class="span12">    <span  class="span4 preLabel required"><label>No. of new people attending project activities:<a href='#' class='helphover' data-original-title='' data-placement='top' data-content='The number of people involved in an activity who have not attended other activities associated with the project'>
   <i class='icon-question-sign'>&nbsp;</i>
-</a></label></span><input class="input-small" style="text-align:center" data-bind='value:data.totalParticipantsNew' data-validation-engine='validate[required,min[0],custom[number]]' type='number' class='input-mini'/></span></div><div class="row-fluid"><span class="span12">    <span  class="span4 preLabel required"><label>No. of farming entities participating in project activities for the first time:<a href='#' class='helphover' data-original-title='' data-placement='top' data-content='Total number of farm entities participating in project activities for the first time'>
+</a></label></span><input class="input-small" style="text-align:center" data-bind='value:data.totalParticipantsNew' data-validation-engine='validate[required,min[0],custom[number]]' type='number' class='input-mini'/></span></div><div class="row-fluid"><span class="span12">    <span  class="span4 preLabel required"><label>No. of farming entities participating in project activities for the first time:<a href='#' class='helphover' data-original-title='' data-placement='top' data-content='A farming entity is a farm business (whether sole trader, partnership, company, etc.) that would be considered a primary producer for tax purposes.'>
   <i class='icon-question-sign'>&nbsp;</i>
 </a></label></span><input class="input-small" style="text-align:center" data-bind='value:data.numberOfFarmingEntitiesNew' data-validation-engine='validate[required,min[0],custom[number]]' type='number' class='input-mini'/></span></div></div><div class="span4">
 <div class="row-fluid"><span class="span12">    <span  class="span4 preLabel required"><label>No. of community groups (non delivery partners) participating:<a href='#' class='helphover' data-original-title='' data-placement='top' data-content='The number of different community groups (non delivery partners) participating in this activity'>
@@ -331,6 +337,9 @@
 </a></label></span><input class="input-small" style="text-align:center" data-bind='value:data.numberOnCountryVisits' data-validation-engine='validate[required,min[0],custom[number]]' type='number' class='input-mini'/></span></div></div></div>
 
         </div>
+        
+
+
         
     </div>
     
@@ -346,7 +355,7 @@
 
 </div>
 
-<script src="static/Zbj0J8XhmZDqWqIAz5C46TWLOULGl7LNvdJeBlO9fMb.js" type="text/javascript" ></script>
+<script src="static/jNGzWep9YTzJQCsSRDWGKonJ7ycvNMNQauAe6AcGX4T.js" type="text/javascript" ></script>
 
 
 
@@ -366,9 +375,12 @@
 <!--[if gte IE 8]><script src="static/knxjs4G9Cquc79O3iYW107XikPB1Z1ii8QWrtBpzlSP.js" type="text/javascript" ></script><![endif]-->
 <script src="static/nRrltgvxdEHd5BqRR1v4XU3ZStOrhDScuH03g4r8E6O.js" type="text/javascript" ></script>
 
-<script src="static/zP22SFJVnKXoWuBJdbsNhcivH2iXiC57wEOHXSDNudf.js" type="text/javascript" ></script>
+<script src="static/iRQrJhH2zDlUTI4nXr10v5JHksIJyPjoe8fHSE4QZcI.js" type="text/javascript" ></script>
 
-<script src="static/QjmKsgTA1QWYxF0gcpdSFROG8mBnzaabMZcvDxBb9Xo.js" type="text/javascript" ></script>
+<script src="static/NsIfUsVWId7YD36PcnVeycNW6GCdIRgD7cdnhiQldmM.js" type="text/javascript" ></script>
+
+
+
 
 
 
@@ -376,7 +388,8 @@
 
 
 <script src="static/IZCc6ZgD3MepYbz4UqlDLzMDNNghSCivcfGebmF9V2d.js" type="text/javascript" ></script>
-<script src="static/I4NiLd8qMXMMgs4hAqHb5YT0jGlQhM4Yp0dku4W1Wng.js" type="text/javascript" ></script>
+<script src="static/NwE7QStklZyP86Oe5o9TUAwbaHqgfflXARrIBoL6Q5s.js" type="text/javascript" ></script>
+
 
 
 
@@ -394,6 +407,132 @@
 
 
 <script type="text/javascript">
+    
+    // load dynamic models - usually objects in a list
+            var speciesLists = [];
+        var site = {};
+
+
+    window["ViewModel"] = function (output, site, config) {
+        var self = this;
+        if (!output) {
+            output = {};
+        }
+        var activityId = output.activityId || config.activityId || '';
+        self.name = "";
+        self.outputId = orBlank(output.outputId);
+
+        self.data = {};
+        self.transients = {};
+        var notCompleted = output.outputNotCompleted;
+
+        if (notCompleted === undefined) {
+            notCompleted = config.collapsedByDefault;
+        }
+
+        self.transients.selectedSite = ko.observable(site);
+        self.outputNotCompleted = ko.observable(notCompleted);
+        self.transients.optional = config.optional || false;
+        self.transients.questionText = config.optionalQuestionText || 'Not applicable';
+        self.transients.dummy = ko.observable();
+
+        self.downloadDataTemplate = function(listName) {
+            var data = ko.mapping.toJS(self.data[listName](), {ignore:['transients']});
+            var params = {
+                listName:listName,
+                type:self.name,
+                data:JSON.stringify(data)
+            };
+            var url = '/activity/excelOutputTemplate';
+            $.fileDownload(url, {
+                httpMethod:'POST',
+                data:params
+            });
+
+        };
+
+
+        // add declarations for dynamic data
+                        self.data.evidenceOfPreviousWeedTreatment=ko.observableArray([]);
+            self.transients.evidenceOfPreviousWeedTreatmentConstraints = ["Bio-control agents active","Dead plants","Death of growing tips","Foliar reduction","Leaf yellowing","Reduced seed production","Root / stem rot present","No evidence","Other (specify in notes)"];
+                
+        self.loadevidenceOfPreviousWeedTreatment = function (data) {
+            if (data !== undefined) {
+                $.each(data, function (i, obj) {
+                    self.data.evidenceOfPreviousWeedTreatment.push(obj);
+                });
+        }};
+        
+            self.data.effectivenessOfPreviousWeedTreatment = ko.observable().extend({numericString:2});
+
+            self.data.recommendedWeedTreatment = ko.observable();
+            self.transients.recommendedWeedTreatmentConstraints = ["Biological control - Biological agents (indicate in notes)","Chemical control - Basal bark spraying","Chemical control - Cut and swab","Chemical control - Cut stump","Chemical control - Foliar spraying","Chemical control - Splatter gun","Chemical control - Stem injection","Chemical control - Stem scraper","Chemical control - Wick applicators","Environmental management - Fire","Environmental management - moisture & nutrient control","Environmental management - over-planting","Manual control - Grubbing / chipping","Manual control - Hand pulling","Mechanical control - Dozing","Mechanical control - Felling","Mechanical control - Mowing","Mechanical control - Pushing","Mechanical control - Slashing","Other (specify in notes)"];
+
+            self.data.notes = ko.observable();
+            self.transients.site = site;
+
+        // this will be called when generating a savable model to remove transient properties
+        self.removeBeforeSave = function (jsData) {
+            // add code to remove any transients added by the dynamic tags
+            
+            delete jsData.activityType;
+            delete jsData.transients;
+            return jsData;
+        };
+
+        // this returns a JS object ready for saving
+        self.modelForSaving = function () {
+            // get model as a plain javascript object
+            var jsData = ko.mapping.toJS(self, {'ignore':['transients']});
+            if (self.outputNotCompleted()) {
+                jsData.data = {};
+            }
+
+            // get rid of any transient observables
+            return self.removeBeforeSave(jsData);
+        };
+
+        // this is a version of toJSON that just returns the model as it will be saved
+        // it is used for detecting when the model is modified (in a way that should invoke a save)
+        // the ko.toJSON conversion is preserved so we can use it to view the active model for debugging
+        self.modelAsJSON = function () {
+            return JSON.stringify(self.modelForSaving());
+        };
+
+        self.loadData = function (data, documents) {
+            // load dynamic data
+                            self.loadevidenceOfPreviousWeedTreatment(data['evidenceOfPreviousWeedTreatment']);
+                self.data['effectivenessOfPreviousWeedTreatment'](orZero(data['effectivenessOfPreviousWeedTreatment']));
+                self.data['recommendedWeedTreatment'](data['recommendedWeedTreatment']);
+                self.data['notes'](data['notes']);
+
+
+            // if there is no data in tables then add an empty row for the user to add data
+            if (typeof self.addRow === 'function' && self.rowCount() === 0) {
+                self.addRow();
+            }
+            self.transients.dummy.notifySubscribers();
+        };
+
+        self.attachDocument = function(target) {
+            var url = config.documentUpdateUrl || fcConfig.documentUpdateUrl;
+            showDocumentAttachInModal(url, new DocumentViewModel({role:'information', stage:config.stage},{activityId:activityId, projectId:config.projectId}), '#attachDocument')
+                    .done(function(result) {
+                        target(new DocumentViewModel(result))
+                    });
+        };
+        self.editDocumentMetadata = function(document) {
+            var url = (config.documentUpdateUrl || fcConfig.documentUpdateUrl) + "/" + document.documentId;
+            showDocumentAttachInModal(url, document, '#attachDocument');
+        };
+        self.deleteDocument = function(document) {
+            document.status('deleted');
+            var url = (config.documentDeleteUrl || fcConfig.documentDeleteUrl)+'/'+document.documentId;
+            $.post(url, {}, function() {});
+
+        };
+    };
+</script><script type="text/javascript">
         $(function(){
 
             var viewModelName = "Evidence_of_Weed_TreatmentViewModel",
@@ -416,6 +555,7 @@
                 if (notCompleted === undefined) {
                     notCompleted = config.collapsedByDefault;
                 }
+                self.transients.selectedSite = ko.observable(site);
                 self.outputNotCompleted = ko.observable(notCompleted);
                 self.transients.optional = config.optional || false;
                 self.transients.questionText = config.optionalQuestionText || 'Not applicable';
@@ -432,7 +572,7 @@
                 });
         }};
         
-            self.data.effectivenessOfPreviousWeedTreatment = ko.observable();
+            self.data.effectivenessOfPreviousWeedTreatment = ko.observable().extend({numericString:2});
 
             self.data.recommendedWeedTreatment = ko.observable();
             self.transients.recommendedWeedTreatmentConstraints = ["Biological control - Biological agents (indicate in notes)","Chemical control - Basal bark spraying","Chemical control - Cut and swab","Chemical control - Cut stump","Chemical control - Foliar spraying","Chemical control - Splatter gun","Chemical control - Stem injection","Chemical control - Stem scraper","Chemical control - Wick applicators","Environmental management - Fire","Environmental management - moisture & nutrient control","Environmental management - over-planting","Manual control - Grubbing / chipping","Manual control - Hand pulling","Mechanical control - Dozing","Mechanical control - Felling","Mechanical control - Mowing","Mechanical control - Pushing","Mechanical control - Slashing","Other (specify in notes)"];
@@ -498,7 +638,7 @@
                 });
             }
 
-            var config = JSON.parse('\u007b\u007d');
+            var config = JSON.parse('\u007b\u0022outputName\u0022:\u0022Evidence of Weed Treatment\u0022\u002c\u0022optional\u0022:false\u002c\u0022collapsedByDefault\u0022:false\u007d');
             window[viewModelInstance] = new this[viewModelName](savedOutput, config);
             var output = savedOutput.data ? savedOutput.data : {};
 
@@ -520,18 +660,214 @@
         });
 
         </script><script type="text/javascript">
+    
+    // load dynamic models - usually objects in a list
+            var Output_WeedObservationMonitoringDetails_weedObservationMonitoringDetailsRow = function (data) {
+            var self = this;
+            if (!data) data = {};
+            self.transients = {};
+            this.weedSpecies =  new SpeciesViewModel(data['weedSpecies'], speciesLists, {printable:''});
+            this.weedCoverHa = ko.observable(orZero(data['weedCoverHa'])).extend({numericString:2});
+            this.weedInfestationDensity = ko.observable(orBlank(data['weedInfestationDensity']));
+            self.transients.weedInfestationDensityConstraints = ["Dense general cover","Dense patches","Few scattered plants","Moderately dense general cover","Moderately dense scattered patches","Sparse scattered patches","Sparse general cover"];
+            this.weedHealth = ko.observable(orBlank(data['weedHealth']));
+            self.transients.weedHealthConstraints = ["Dead","Healthy","Stressed"];
+            this.weedReproductiveStatus = ko.observable(orBlank(data['weedReproductiveStatus']));
+            self.transients.weedReproductiveStatusConstraints = ["Flowering (FLWG)","Immature (IMTR)","Not recorded (NRRS)","Seeding (SEDG)","Vegetative & Mature (VGTV)"];
+            this.weedStatus = ko.observable(orBlank(data['weedStatus']));
+            self.transients.weedStatusConstraints = ["Active Infestation","Closed","New Infestation","Under control","Under monitoring","Unknown"];
+        };
+        var speciesLists = [];
+        var site = {};
+
+
+    window["ViewModel"] = function (output, site, config) {
+        var self = this;
+        if (!output) {
+            output = {};
+        }
+        var activityId = output.activityId || config.activityId || '';
+        self.name = "";
+        self.outputId = orBlank(output.outputId);
+
+        self.data = {};
+        self.transients = {};
+        var notCompleted = output.outputNotCompleted;
+
+        if (notCompleted === undefined) {
+            notCompleted = config.collapsedByDefault;
+        }
+
+        self.transients.selectedSite = ko.observable(site);
+        self.outputNotCompleted = ko.observable(notCompleted);
+        self.transients.optional = config.optional || false;
+        self.transients.questionText = config.optionalQuestionText || 'Not applicable';
+        self.transients.dummy = ko.observable();
+
+        self.downloadDataTemplate = function(listName) {
+            var data = ko.mapping.toJS(self.data[listName](), {ignore:['transients']});
+            var params = {
+                listName:listName,
+                type:self.name,
+                data:JSON.stringify(data)
+            };
+            var url = '/activity/excelOutputTemplate';
+            $.fileDownload(url, {
+                httpMethod:'POST',
+                data:params
+            });
+
+        };
+
+
+        // add declarations for dynamic data
+        
+            self.data.weedObservationMonitoringDetails = ko.observableArray([]);
+            self.selectedweedObservationMonitoringDetailsRow = ko.observable();
+        
+
+            self.loadweedObservationMonitoringDetails = function (data, append) {
+                if (!append) {
+                    self.data.weedObservationMonitoringDetails([]);
+                }
+                if (data === undefined) {
+                    self.addweedObservationMonitoringDetailsRow();
+                } else {
+                    $.each(data, function (i, obj) {
+                        self.data.weedObservationMonitoringDetails.push(new Output_WeedObservationMonitoringDetails_weedObservationMonitoringDetailsRow(obj));
+                    });
+                }
+            };
+            self.downloadweedObservationMonitoringDetailsTemplateWithData = function() {
+                self.downloadDataTemplate('weedObservationMonitoringDetails');
+            }
+
+            self.addweedObservationMonitoringDetailsRow = function () {
+                var newRow = new Output_WeedObservationMonitoringDetails_weedObservationMonitoringDetailsRow();
+                self.data.weedObservationMonitoringDetails.push(newRow);
+                
+            };
+            self.removeweedObservationMonitoringDetailsRow = function (row) {
+                self.data.weedObservationMonitoringDetails.remove(row);
+                
+            };
+            self.weedObservationMonitoringDetailsrowCount = function () {
+                return self.data.weedObservationMonitoringDetails().length;
+            };
+
+            self.weedObservationMonitoringDetailsTableDataUploadVisible = ko.observable(false);
+            self.showweedObservationMonitoringDetailsTableDataUpload = function() {
+                self.weedObservationMonitoringDetailsTableDataUploadVisible(!self.weedObservationMonitoringDetailsTableDataUploadVisible());
+            };
+
+            self.templateDownloadUrl = function(type) {
+                return '/proxy/excelOutputTemplate?listName=weedObservationMonitoringDetails&type=';
+            }
+
+            self.weedObservationMonitoringDetailsTableDataUploadOptions = {
+                    url:'/activity/ajaxUpload',
+                    done:function(e, data) {
+                        if (data.result.error) {
+                            self.uploadFailed(data.result.error);
+                        }
+                        else {
+                            self.loadweedObservationMonitoringDetails(data.result.data, self.appendTableRows());
+                        }
+                    },
+                    fail:function(e, data) {
+                        var message = 'Please contact MERIT support and attach your spreadsheet to help us resolve the problem';
+                        self.uploadFailed(data);
+
+                    },
+                    uploadTemplateId: "weedObservationMonitoringDetailstemplate-upload",
+                    downloadTemplateId: "weedObservationMonitoringDetailstemplate-download",
+                    formData:{type:'null', listName:'weedObservationMonitoringDetails'}
+            };
+            self.appendTableRows = ko.observable(true);
+            self.uploadFailed = function(message) {
+                        var text = "<span class='label label-important'>Important</span><h4>There was an error uploading your data.</h4>";
+                        text += "<p>"+message+"</p>";
+                        bootbox.alert(text)
+            };
+
+            self.data.weedInspectionNotes = ko.observable();
+            self.transients.site = site;
+
+        // this will be called when generating a savable model to remove transient properties
+        self.removeBeforeSave = function (jsData) {
+            // add code to remove any transients added by the dynamic tags
+                            delete jsData.selectedweedObservationMonitoringDetailsRow;
+                delete jsData.weedObservationMonitoringDetailsTableDataUploadOptions
+                delete jsData.weedObservationMonitoringDetailsTableDataUploadVisible
+
+            delete jsData.activityType;
+            delete jsData.transients;
+            return jsData;
+        };
+
+        // this returns a JS object ready for saving
+        self.modelForSaving = function () {
+            // get model as a plain javascript object
+            var jsData = ko.mapping.toJS(self, {'ignore':['transients']});
+            if (self.outputNotCompleted()) {
+                jsData.data = {};
+            }
+
+            // get rid of any transient observables
+            return self.removeBeforeSave(jsData);
+        };
+
+        // this is a version of toJSON that just returns the model as it will be saved
+        // it is used for detecting when the model is modified (in a way that should invoke a save)
+        // the ko.toJSON conversion is preserved so we can use it to view the active model for debugging
+        self.modelAsJSON = function () {
+            return JSON.stringify(self.modelForSaving());
+        };
+
+        self.loadData = function (data, documents) {
+            // load dynamic data
+                            self.loadweedObservationMonitoringDetails(data.weedObservationMonitoringDetails);
+                self.data['weedInspectionNotes'](data['weedInspectionNotes']);
+
+
+            // if there is no data in tables then add an empty row for the user to add data
+            if (typeof self.addRow === 'function' && self.rowCount() === 0) {
+                self.addRow();
+            }
+            self.transients.dummy.notifySubscribers();
+        };
+
+        self.attachDocument = function(target) {
+            var url = config.documentUpdateUrl || fcConfig.documentUpdateUrl;
+            showDocumentAttachInModal(url, new DocumentViewModel({role:'information', stage:config.stage},{activityId:activityId, projectId:config.projectId}), '#attachDocument')
+                    .done(function(result) {
+                        target(new DocumentViewModel(result))
+                    });
+        };
+        self.editDocumentMetadata = function(document) {
+            var url = (config.documentUpdateUrl || fcConfig.documentUpdateUrl) + "/" + document.documentId;
+            showDocumentAttachInModal(url, document, '#attachDocument');
+        };
+        self.deleteDocument = function(document) {
+            document.status('deleted');
+            var url = (config.documentDeleteUrl || fcConfig.documentDeleteUrl)+'/'+document.documentId;
+            $.post(url, {}, function() {});
+
+        };
+    };
+</script><script type="text/javascript">
         $(function(){
 
             var viewModelName = "Weed_Observation_and_Monitoring_DetailsViewModel",
                 viewModelInstance = viewModelName + "Instance";
 
             // load dynamic models - usually objects in a list
-                    var WeedObservationMonitoringDetailsRow = function (data) {
+                    var Output_WeedObservationMonitoringDetails_weedObservationMonitoringDetailsRow = function (data) {
             var self = this;
             if (!data) data = {};
             self.transients = {};
-            this.weedSpecies =  new SpeciesViewModel(data['weedSpecies'], speciesLists);
-            this.weedCoverHa = ko.observable(orZero(data['weedCoverHa']));
+            this.weedSpecies =  new SpeciesViewModel(data['weedSpecies'], speciesLists, {printable:''});
+            this.weedCoverHa = ko.observable(orZero(data['weedCoverHa'])).extend({numericString:2});
             this.weedInfestationDensity = ko.observable(orBlank(data['weedInfestationDensity']));
             self.transients.weedInfestationDensityConstraints = ["Dense general cover","Dense patches","Few scattered plants","Moderately dense general cover","Moderately dense scattered patches","Sparse scattered patches","Sparse general cover"];
             this.weedHealth = ko.observable(orBlank(data['weedHealth']));
@@ -557,6 +893,7 @@
                 if (notCompleted === undefined) {
                     notCompleted = config.collapsedByDefault;
                 }
+                self.transients.selectedSite = ko.observable(site);
                 self.outputNotCompleted = ko.observable(notCompleted);
                 self.transients.optional = config.optional || false;
                 self.transients.questionText = config.optionalQuestionText || 'Not applicable';
@@ -576,13 +913,16 @@
                     self.addweedObservationMonitoringDetailsRow();
                 } else {
                     $.each(data, function (i, obj) {
-                        self.data.weedObservationMonitoringDetails.push(new WeedObservationMonitoringDetailsRow(obj));
+                        self.data.weedObservationMonitoringDetails.push(new Output_WeedObservationMonitoringDetails_weedObservationMonitoringDetailsRow(obj));
                     });
                 }
             };
+            self.downloadweedObservationMonitoringDetailsTemplateWithData = function() {
+                self.downloadDataTemplate('weedObservationMonitoringDetails');
+            }
 
             self.addweedObservationMonitoringDetailsRow = function () {
-                var newRow = new WeedObservationMonitoringDetailsRow();
+                var newRow = new Output_WeedObservationMonitoringDetails_weedObservationMonitoringDetailsRow();
                 self.data.weedObservationMonitoringDetails.push(newRow);
                 
             };
@@ -598,6 +938,10 @@
             self.showweedObservationMonitoringDetailsTableDataUpload = function() {
                 self.weedObservationMonitoringDetailsTableDataUploadVisible(!self.weedObservationMonitoringDetailsTableDataUploadVisible());
             };
+
+            self.templateDownloadUrl = function(type) {
+                return '/proxy/excelOutputTemplate?listName=weedObservationMonitoringDetails&type=Weed+Observation+and+Monitoring+Details';
+            }
 
             self.weedObservationMonitoringDetailsTableDataUploadOptions = {
                     url:'/activity/ajaxUpload',
@@ -687,7 +1031,7 @@
                 });
             }
 
-            var config = JSON.parse('\u007b\u007d');
+            var config = JSON.parse('\u007b\u0022outputName\u0022:\u0022Weed Observation and Monitoring Details\u0022\u002c\u0022optional\u0022:false\u002c\u0022collapsedByDefault\u0022:false\u007d');
             window[viewModelInstance] = new this[viewModelName](savedOutput, config);
             var output = savedOutput.data ? savedOutput.data : {};
 
@@ -709,6 +1053,130 @@
         });
 
         </script><script type="text/javascript">
+    
+    // load dynamic models - usually objects in a list
+            var speciesLists = [];
+        var site = {};
+
+
+    window["ViewModel"] = function (output, site, config) {
+        var self = this;
+        if (!output) {
+            output = {};
+        }
+        var activityId = output.activityId || config.activityId || '';
+        self.name = "";
+        self.outputId = orBlank(output.outputId);
+
+        self.data = {};
+        self.transients = {};
+        var notCompleted = output.outputNotCompleted;
+
+        if (notCompleted === undefined) {
+            notCompleted = config.collapsedByDefault;
+        }
+
+        self.transients.selectedSite = ko.observable(site);
+        self.outputNotCompleted = ko.observable(notCompleted);
+        self.transients.optional = config.optional || false;
+        self.transients.questionText = config.optionalQuestionText || 'Not applicable';
+        self.transients.dummy = ko.observable();
+
+        self.downloadDataTemplate = function(listName) {
+            var data = ko.mapping.toJS(self.data[listName](), {ignore:['transients']});
+            var params = {
+                listName:listName,
+                type:self.name,
+                data:JSON.stringify(data)
+            };
+            var url = '/activity/excelOutputTemplate';
+            $.fileDownload(url, {
+                httpMethod:'POST',
+                data:params
+            });
+
+        };
+
+
+        // add declarations for dynamic data
+        
+            self.data.totalParticipantsNotEmployed = ko.observable().extend({numericString:2});
+
+            self.data.numberOfIndigenousParticipants = ko.observable().extend({numericString:2});
+
+            self.data.numberOnCountryVisits = ko.observable().extend({numericString:2});
+
+            self.data.totalParticipantsNew = ko.observable().extend({numericString:2});
+
+            self.data.numberOfCommunityGroups = ko.observable().extend({numericString:2});
+
+            self.data.numberOfFarmingEntitiesNew = ko.observable().extend({numericString:2});
+            self.transients.site = site;
+
+        // this will be called when generating a savable model to remove transient properties
+        self.removeBeforeSave = function (jsData) {
+            // add code to remove any transients added by the dynamic tags
+            
+            delete jsData.activityType;
+            delete jsData.transients;
+            return jsData;
+        };
+
+        // this returns a JS object ready for saving
+        self.modelForSaving = function () {
+            // get model as a plain javascript object
+            var jsData = ko.mapping.toJS(self, {'ignore':['transients']});
+            if (self.outputNotCompleted()) {
+                jsData.data = {};
+            }
+
+            // get rid of any transient observables
+            return self.removeBeforeSave(jsData);
+        };
+
+        // this is a version of toJSON that just returns the model as it will be saved
+        // it is used for detecting when the model is modified (in a way that should invoke a save)
+        // the ko.toJSON conversion is preserved so we can use it to view the active model for debugging
+        self.modelAsJSON = function () {
+            return JSON.stringify(self.modelForSaving());
+        };
+
+        self.loadData = function (data, documents) {
+            // load dynamic data
+                            self.data['totalParticipantsNotEmployed'](orZero(data['totalParticipantsNotEmployed']));
+                self.data['numberOfIndigenousParticipants'](orZero(data['numberOfIndigenousParticipants']));
+                self.data['numberOnCountryVisits'](orZero(data['numberOnCountryVisits']));
+                self.data['totalParticipantsNew'](orZero(data['totalParticipantsNew']));
+                self.data['numberOfCommunityGroups'](orZero(data['numberOfCommunityGroups']));
+                self.data['numberOfFarmingEntitiesNew'](orZero(data['numberOfFarmingEntitiesNew']));
+
+
+            // if there is no data in tables then add an empty row for the user to add data
+            if (typeof self.addRow === 'function' && self.rowCount() === 0) {
+                self.addRow();
+            }
+            self.transients.dummy.notifySubscribers();
+        };
+
+        self.attachDocument = function(target) {
+            var url = config.documentUpdateUrl || fcConfig.documentUpdateUrl;
+            showDocumentAttachInModal(url, new DocumentViewModel({role:'information', stage:config.stage},{activityId:activityId, projectId:config.projectId}), '#attachDocument')
+                    .done(function(result) {
+                        target(new DocumentViewModel(result))
+                    });
+        };
+        self.editDocumentMetadata = function(document) {
+            var url = (config.documentUpdateUrl || fcConfig.documentUpdateUrl) + "/" + document.documentId;
+            showDocumentAttachInModal(url, document, '#attachDocument');
+        };
+        self.deleteDocument = function(document) {
+            document.status('deleted');
+            var url = (config.documentDeleteUrl || fcConfig.documentDeleteUrl)+'/'+document.documentId;
+            $.post(url, {}, function() {});
+
+        };
+    };
+</script><script type="text/javascript">
         $(function(){
 
             var viewModelName = "Participant_InformationViewModel",
@@ -731,6 +1199,7 @@
                 if (notCompleted === undefined) {
                     notCompleted = config.collapsedByDefault;
                 }
+                self.transients.selectedSite = ko.observable(site);
                 self.outputNotCompleted = ko.observable(notCompleted);
                 self.transients.optional = config.optional || false;
                 self.transients.questionText = config.optionalQuestionText || 'Not applicable';
@@ -738,17 +1207,17 @@
 
                 // add declarations for dynamic data
                 
-            self.data.totalParticipantsNotEmployed = ko.observable();
+            self.data.totalParticipantsNotEmployed = ko.observable().extend({numericString:2});
 
-            self.data.numberOfIndigenousParticipants = ko.observable();
+            self.data.numberOfIndigenousParticipants = ko.observable().extend({numericString:2});
 
-            self.data.numberOnCountryVisits = ko.observable();
+            self.data.numberOnCountryVisits = ko.observable().extend({numericString:2});
 
-            self.data.totalParticipantsNew = ko.observable();
+            self.data.totalParticipantsNew = ko.observable().extend({numericString:2});
 
-            self.data.numberOfCommunityGroups = ko.observable();
+            self.data.numberOfCommunityGroups = ko.observable().extend({numericString:2});
 
-            self.data.numberOfFarmingEntitiesNew = ko.observable();
+            self.data.numberOfFarmingEntitiesNew = ko.observable().extend({numericString:2});
             self.transients.site = site;
 
                 // this will be called when generating a savable model to remove transient properties
@@ -811,7 +1280,7 @@
                 });
             }
 
-            var config = JSON.parse('\u007b\u007d');
+            var config = JSON.parse('\u007b\u0022outputName\u0022:\u0022Participant Information\u0022\u002c\u0022optional\u0022:false\u002c\u0022collapsedByDefault\u0022:false\u007d');
             window[viewModelInstance] = new this[viewModelName](savedOutput, config);
             var output = savedOutput.data ? savedOutput.data : {};
 

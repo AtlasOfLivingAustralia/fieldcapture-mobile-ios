@@ -485,7 +485,7 @@ function PIDLayer(pid, wmsServer, style){
                     //load the overlay instead
                     var pid = loc.pid;
                     //console.log('Loading PID: ' + pid);
-                    f = new PIDLayer(pid, this.wmsServer, loc.style);
+                    f = new PIDLayer(pid, this.wmsServer, loc.style || 'restricted');
                     map.map.overlayMapTypes.push(f);
                     $.ajax({
                         url: this.featureService+ '?featureId=' + pid,
@@ -507,7 +507,7 @@ function PIDLayer(pid, wmsServer, style){
 //                           self.featureBounds.extend(new google.maps.LatLng(0,0));
 //                           self.featureBounds.extend(new google.maps.LatLng(-90, 180));
                         }
-                        self.addFeature(f, loc);
+                        self.addFeature(f, loc, iw);
                     });
                     loaded = true;
                 } else {
@@ -552,9 +552,10 @@ function PIDLayer(pid, wmsServer, style){
                 });
             }
             if (loc.popup && iw) {
-                // add infoWindow popu
+                // add infoWindow popup
                 google.maps.event.addListener(f, 'click', function(event) {
                     iw.setContent(loc.popup);
+                    iw.setPosition(event.latLng);
                     iw.open(self.map, f);
                 });
 
@@ -627,7 +628,7 @@ function PIDLayer(pid, wmsServer, style){
             var self = this,
                 features = this.featureIndex[id];
             if (features) {
-                $.each(this.featureIndex[id], function (i,f) {
+                $.each(features, function (i,f) {
                     self.highlightFeature(f);
                 });
             }
@@ -645,13 +646,18 @@ function PIDLayer(pid, wmsServer, style){
         //
         highlightFeature: function (f) {
             if (!f) { return; }
+
             if (f instanceof google.maps.Marker) {
                 f.setOptions({icon: 'http://collections.ala.org.au/images/map/orange-dot.png'});
-            } else if (f instanceof google.maps.Polygon) {
+            } else if (f instanceof google.maps.Polygon || f instanceof google.maps.Circle) {
                 f.setOptions({
-                    strokeColor:'#BC2B03',
-                    fillColor:'#DF4A21'
+                    fillOpacity:1
                 });
+            } else if (f instanceof google.maps.ImageMapType) {
+                f.setOpacity(1);
+            }
+            else {
+                console.log(f);
             }
         },
         //
@@ -659,11 +665,12 @@ function PIDLayer(pid, wmsServer, style){
             if (!f) { return; }
             if (f instanceof google.maps.Marker) {
                 f.setOptions({icon: null});
-            } else if (f instanceof google.maps.Polygon) {
+            } else if (f instanceof google.maps.Polygon || f instanceof google.maps.Circle) {
                 f.setOptions({
-                    strokeColor:'#202020',
-                    fillColor:'#eeeeee'
+                    fillOpacity:0.5
                 });
+            } else if (f instanceof google.maps.ImageMapType) {
+                f.setOpacity(0.5);
             }
         },
         animateFeatureById: function (id) {
@@ -782,7 +789,8 @@ function PIDLayer(pid, wmsServer, style){
 
             self.reset();
 
-        }
+        },
+
     };
 
     /*
@@ -804,11 +812,49 @@ function PIDLayer(pid, wmsServer, style){
         map.clearFeatures();
     }
 
+
+    var markersArray = [];
+
+    function addMarker(lat, lng, name, dragEvent){
+
+        var infowindow = new google.maps.InfoWindow({
+            content: '<span class="poiMarkerPopup">' + name +'</span>'
+        });
+
+        var marker = new google.maps.Marker({
+            position: new google.maps.LatLng(lat,lng),
+            title:name,
+            draggable:false,
+            map:map.map
+        });
+
+        marker.setIcon('https://maps.google.com/mapfiles/marker_yellow.png');
+
+        google.maps.event.addListener(marker, 'click', function() {
+            infowindow.open(map.map, marker);
+        });
+
+        markersArray.push(marker);
+    }
+
+    function removeMarkers(){
+        if (markersArray) {
+            for (var i in markersArray) {
+                markersArray[i].setMap(null);
+                //markersArray.removeAt(i);
+            }
+        }
+        markersArray = [];
+    }
+
     // expose these methods to the global scope
     windows.init_map_with_features = init;
     windows.mapSite = mapSite;
     windows.clearMap = clearMap;
+    windows.addMarker = addMarker;
+    windows.removeMarkers = removeMarkers;
     windows.alaMap = map;
+
 
 
 }(this));

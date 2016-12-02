@@ -284,10 +284,90 @@ ko.bindingHandlers.onClickShowTab = {
         if (tabId) $(tabId).tab('show');
         originalFunction.apply(viewModel, arguments);
       }
-    }
+    };
     ko.bindingHandlers.click.init(element, newValueAccesssor, allBindingsAccessor, viewModel, bindingContext);
   }
 };
+
+ko.bindingHandlers.expandable = {
+
+  'init': function() {
+    var self = ko.bindingHandlers.expandable;
+    self.truncate = function(cellWidth, originalTextWidth, originalText) {
+      var fractionThatFits = cellWidth/originalTextWidth,
+          truncationPoint = Math.floor(originalText.length * fractionThatFits) - 6;
+      return originalText.substr(0,truncationPoint) + '...';
+    };
+  },
+  'update':function(element, valueAccessor) {
+    var self = ko.bindingHandlers.expandable;
+
+    var text = ko.utils.unwrapObservable(valueAccessor());
+    if ($.isArray(text)) {
+      text = text.join(",");
+    }
+    var $element = $(element),
+        textWidth = $element.textWidth(text),
+        cellWidth = $element.availableWidth();
+
+    $element.removeClass('truncated');
+    var needsTruncation = cellWidth > 0 && textWidth > cellWidth;
+    if (!needsTruncation) {
+      $element.html(text);
+      return;
+    }
+
+    var anchor = $('<a/>');
+    anchor.click(function() {
+      toggleTruncate($element);
+    });
+    $element.empty();
+    $element.html("");
+    $element.append(anchor);
+
+
+
+    var toggleTruncate = function($element) {
+      var truncate = !$element.hasClass('truncated');
+      $element.toggleClass('truncated');
+      var anchor = $element.find("a");
+      if (truncate) {
+        $element.attr('title', text);
+        anchor.html(self.truncate(cellWidth, textWidth, text));
+      } else {
+        anchor.html(text);
+        $element.removeAttr('title');
+      }
+    };
+    toggleTruncate($element);
+
+  }
+};
+
+// the following code handles resize-sensitive truncation of the description field
+$.fn.textWidth = function(text, font) {
+  if (!$.fn.textWidth.fakeEl) $.fn.textWidth.fakeEl = $('<span>').hide().appendTo(document.body);
+  $.fn.textWidth.fakeEl.html(text || this.val() || this.text()).css('font', font || this.css('font'));
+  return $.fn.textWidth.fakeEl.width();
+};
+
+$.fn.availableWidth = function() {
+  if (this.css('display').match(/inline/)) {
+    var siblingWidth = 0;
+    this.siblings().each(function(i, sibling) {
+      var $sibling = $(sibling);
+      if ($sibling.css('display').match(/inline/)) {
+        siblingWidth += $sibling.width();
+      }
+    });
+    return this.parent().width() - siblingWidth;
+  }
+  else {
+    return this.width();
+  }
+};
+
+
 /*
 Handles the display and editing of UTC dates.
 
@@ -373,17 +453,17 @@ function isValidDate(d) {
 
 function convertToSimpleDate(isoDate, includeTime) {
     if (!isoDate) { return ''}
-    var date = isoDate, strDate;
-    if (typeof isoDate === 'string') {
-        date = Date.fromISO(isoDate);
+    if (typeof isoDate === 'object') {
+        // assume a date object
+        if (!isValidDate(isoDate)) {
+            return '';
+        }
     }
-    if (!isValidDate(date)) { return '' }
-    strDate = pad(date.getDate(),2) + '-' + pad(date.getMonth() + 1,2) + '-' + date.getFullYear();
-    strDate = pad(date.getDate(),2) + '-' + pad(date.getMonth() + 1,2) + '-' + date.getFullYear();
-    if (includeTime) {
-        strDate = strDate + ' ' + pad(date.getHours(),2) + ':' + pad(date.getMinutes(),2);
-    }
-    return strDate;
+    // Format the stage labels using Melbourne/Sydney/Canberra time to avoid problems where the date starts
+    // at midnight and displays as the previous day in other timezones.
+    var date = moment.tz(isoDate, "Australia/Sydney");
+    var format = includeTime ? "DD-MM-YYYY HH:MM" : "DD-MM-YYYY";
+    return date.format(format);
 }
 
 function convertToIsoDate(date) {
@@ -398,13 +478,25 @@ function convertToIsoDate(date) {
                 day = date.substr(0,2),
                 hours = date.length > 12 ? date.substr(11,2) : 0,
                 minutes = date.length > 15 ? date.substr(14,2) : 0;
-            return new Date(year, month, day, hours, minutes).toISOStringNoMillis();
+            var dt = new Date(year, month, day, hours, minutes);
+            if (isValidDate(dt)) {
+                return dt.toISOStringNoMillis();
+            }
+            else {
+                return '';
+            }
         } else {
             return '';
         }
     } else if (typeof date === 'object') {
         // assume a date object
-        return date.toISOStringNoMillis();
+        if (isValidDate(date)) {
+            return date.toISOStringNoMillis();
+        }
+        else {
+            return '';
+        }
+
     } else {
         return '';
     }

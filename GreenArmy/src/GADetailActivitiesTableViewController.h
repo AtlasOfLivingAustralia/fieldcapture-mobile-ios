@@ -11,8 +11,9 @@
 #import "GADetailFormVIewController.h"
 #import <CoreLocation/CoreLocation.h>
 #import "GACreateSiteModalViewController.h"
+#import "JGActionSheet.h"
 
-@interface GADetailActivitiesTableViewController : UITableViewController <UISplitViewControllerDelegate,UIActionSheetDelegate,UISearchDisplayDelegate, UISearchBarDelegate, UIAlertViewDelegate,CLLocationManagerDelegate, GACreateSiteModalDelegate,UITableViewDelegate>
+@interface GADetailActivitiesTableViewController : UITableViewController <UISplitViewControllerDelegate,UIActionSheetDelegate,UISearchDisplayDelegate, UISearchBarDelegate, UIAlertViewDelegate,CLLocationManagerDelegate, GACreateSiteModalDelegate,UITableViewDelegate, JGActionSheetDelegate>
 
 @property (strong, nonatomic) IBOutlet UITableView *tableView;
 @property (nonatomic, strong) NSMutableArray * projects;

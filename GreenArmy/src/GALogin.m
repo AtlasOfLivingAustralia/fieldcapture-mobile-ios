@@ -10,6 +10,8 @@
 #import "GAAppDelegate.h"
 #import "MRProgress.h"
 #import "GASettings.h"
+#import "SVModalWebViewController.h"
+#import "GASettingsConstant.h"
 
 @interface GALogin ()
 
@@ -47,16 +49,28 @@
 - (IBAction)onClickLogin:(id)sender {
     [self authenticate];
 }
-- (IBAction)onClickRegister:(id)sender{
-    //TODO: Render the webpage under the webview modal.
-    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://auth.ala.org.au/userdetails/registration/createAccount"]];
+- (IBAction)onClickRegister:(id)sender {
+    GAAppDelegate *appDelegate = (GAAppDelegate *)[[UIApplication sharedApplication] delegate];
+    if([appDelegate.gaUtil notReachable]) {
+        [appDelegate.gaUtil showAlert];
+        return;
+    }
+    
+    NSString *url = [[NSString alloc] initWithFormat:@"%@", REGISTER_URL];
+    SVModalWebViewController *webViewController = [[SVModalWebViewController alloc] initWithAddress: url];
+    webViewController.title = @"Register";
+    [self presentViewController:webViewController animated:YES completion:NULL];
 }
 
 -(void) authenticate {
-    // Processing UI indicator on the main thread.
     GAAppDelegate *appDelegate = (GAAppDelegate *)[[UIApplication sharedApplication] delegate];
-    [MRProgressOverlayView showOverlayAddedTo:appDelegate.window title:@"Processing.." mode:MRProgressOverlayViewModeIndeterminate animated:YES];
+    if([appDelegate.gaUtil notReachable]) {
+        [appDelegate.gaUtil showAlert];
+        return;
+    }
     
+    // Processing UI indicator on the main thread.
+    [MRProgressOverlayView showOverlayAddedTo:appDelegate.window title:@"Processing.." mode:MRProgressOverlayViewModeIndeterminate animated:YES];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         // Time consuming processing on the seperate task
         GAAppDelegate *appDelegate = (GAAppDelegate *)[[UIApplication sharedApplication] delegate];

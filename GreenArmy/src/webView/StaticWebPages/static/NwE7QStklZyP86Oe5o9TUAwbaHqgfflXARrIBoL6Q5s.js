@@ -41,6 +41,7 @@ OrganisationViewModel = function (props) {
         return orgTypesMap[self.orgType()] || "Unspecified";
     });
     self.name = ko.observable(props.name);
+    self.acronym = ko.observable(props.acronym);
     self.description = ko.observable(props.description).extend({markdown:true});
     self.url = ko.observable(props.url);
     self.newsAndEvents = ko.observable(props.newsAndEvents).extend({markdown:true});;
@@ -225,6 +226,46 @@ OrganisationSelectionViewModel = function(organisations, userOrganisations, init
     }
 
 };
+
+var ServerSideOrganisationsViewModel = function() {
+    var self = this;
+    self.pagination = new PaginationViewModel({}, self);
+    self.organisations = ko.observableArray([]);
+    self.searchTerm = ko.observable('').extend({throttle:500});
+    self.searchTerm.subscribe(function(term) {
+       self.refreshPage(0);
+    });
+    self.refreshPage = function(offset) {
+        var url = fcConfig.organisationSearchUrl;
+        var params = {offset:offset, max:self.pagination.resultsPerPage()};
+        if (self.searchTerm()) {
+            params.searchTerm = self.searchTerm();
+        }
+        else {
+            params.sort = "nameSort"; // Sort by name unless there is a search term, in which case we sort by relevence.
+        }
+        $.get(url, params, function(data) {
+            if (data.hits) {
+                var orgs = data.hits.hits || [];
+                self.organisations($.map(orgs, function(hit) {
+                    if (hit._source.logoUrl) {
+                        hit._source.documents = [{
+                            role:'logo',
+                            url: hit._source.logoUrl
+                        }]
+                    }
+                    return new OrganisationViewModel(hit._source);
+                }));
+            }
+            if (offset == 0) {
+                self.pagination.loadPagination(0, data.hits.total);
+            }
+
+        });
+    };
+    self.refreshPage(0);
+};
+
 
 var OrganisationsViewModel = function(organisations, userOrgIds) {
     var self = this;
@@ -2325,6 +2366,543 @@ var Parser = (function (scope) {
 	return Parser
 })(typeof exports === 'undefined' ? {} : exports);
 
+function ActivityViewModel (act, site, project, metaModel, themes) {
+    var self = this;
+    self.activityId = act.activityId;
+    self.description = ko.observable(act.description);
+    self.notes = ko.observable(act.notes);
+    self.startDate = ko.observable(act.startDate || act.plannedStartDate).extend({simpleDate: false});
+    self.endDate = ko.observable(act.endDate || act.plannedEndDate).extend({simpleDate: false});
+    self.eventPurpose = ko.observable(act.eventPurpose);
+    self.fieldNotes = ko.observable(act.fieldNotes);
+    self.associatedProgram = ko.observable(act.associatedProgram);
+    self.associatedSubProgram = ko.observable(act.associatedSubProgram);
+    self.projectStage = ko.observable(act.projectStage || "");
+    self.progress = ko.observable(act.progress || 'started');
+    self.mainTheme = ko.observable(act.mainTheme);
+    self.type = ko.observable(act.type);
+    self.siteId = ko.observable(act.siteId);
+    self.projectId = act.projectId;
+    self.transients = {};
+    self.transients.site = site;
+    self.transients.project = project;
+    self.transients.metaModel = metaModel || {};
+    self.transients.activityProgressValues = ['planned','started','finished'];
+    self.transients.themes = $.map(themes || [], function (obj, i) { return obj.name });
+    self.goToProject = function () {
+        if (self.projectId) {
+            document.location.href = fcConfig.projectViewUrl + self.projectId;
+        }
+    };
+    self.goToSite = function () {
+        if (self.siteId()) {
+            document.location.href = fcConfig.siteViewUrl + self.siteId();
+        }
+    };
+    if (metaModel.supportsPhotoPoints) {
+        self.transients.photoPointModel = ko.observable(new PhotoPointViewModel(site, act));
+    }
+}
+
+var PhotoPointViewModel = function(site, activity, config) {
+
+    var self = this;
+
+    var defaults = {
+        savePhotoPointUrl: fcConfig.savePhotoPointUrl,
+        deletePhotoPointUrl: fcConfig.deletePhotoPointUrl,
+        newPhotoPointModalSelector: '#edit-photopoint',
+        newPhotoPointMapHolderSelector: '#photoPointMapHolder',
+        activityMapHolderSelector: '#map-holder',
+        mapSelector: '#smallMap'
+    };
+    var options = $.extend(defaults, config);
+
+
+    self.site = site;
+    self.photoPoints = ko.observableArray();
+
+    if (site && site.poi) {
+
+        $.each(site.poi, function(index, obj) {
+            var photos = ko.utils.arrayFilter(activity.documents, function(doc) {
+                return doc.siteId === site.siteId && doc.poiId === obj.poiId;
+            });
+            self.photoPoints.push(photoPointPhotos(site, obj, activity.activityId, photos, config));
+        });
+    }
+
+    self.removePhotoPoint = function(photoPoint) {
+
+        $.ajax({
+            url: options.deletePhotoPointUrl+'/'+site.siteId+'?poiId='+photoPoint.photoPoint.poiId,
+            method: "POST"
+        }).done(function(data) {
+            if (!data ||  data.error) {
+                bootbox.alert("Failed to delete the Photo Point.");
+            }
+            else {
+                self.photoPoints.remove(photoPoint);
+            }
+        }).fail(function() {
+            bootbox.alert("Failed to delete the Photo Point.");
+        });
+
+    };
+
+    self.editPhotoPoint = function(photoPointWithPhotos) {
+        self.addOrEditPhotoPoint(photoPointWithPhotos, photoPointWithPhotos.photoPoint.modelForSaving());
+    };
+
+    self.addPhotoPoint = function() {
+        self.addOrEditPhotoPoint(null);
+    };
+
+    self.addOrEditPhotoPoint = function(photoPointWithPhotos, photoPointData, successCallback) {
+        var map = alaMap.map;
+        var originalBounds = map.getBounds();
+        $(options.newPhotoPointModalSelector).modal('show').on('shown', function() {
+            // "Borrow" the map display from the top of the page as it is already displaying the site / zoomed etc.
+            $(options.newPhotoPointMapHolderSelector).append($(options.mapSelector));
+            google.maps.event.trigger(map, "resize");
+
+        }).validationEngine('attach', {scroll:false});
+
+        var model = new EditPhotoPointViewModel(photoPointData, map, !photoPointWithPhotos);
+
+        var cleanup = function() {
+            model.cleanup();
+
+            // Return the map to the top of the page.
+            $(options.activityMapHolderSelector).append($(options.mapSelector));
+            google.maps.event.trigger(map, "resize");
+            map.fitBounds(originalBounds);
+            $(options.newPhotoPointModalSelector).modal('hide');
+            ko.cleanNode($(options.newPhotoPointModalSelector)[0]);
+
+        };
+        model.save = function() {
+            var valid = $(options.newPhotoPointModalSelector).validationEngine("validate");
+
+            if (valid) {
+                var jsData = model.photoPoint.modelForSaving();
+                var json = JSON.stringify(jsData);
+                var url = options.savePhotoPointUrl+'/'+site.siteId;
+                $.ajax({
+                    url: url,
+                    data: json,
+                    method: "POST",
+                    contentType: "application/json"
+                }).done(function(data) {
+                    if (!data || !data.resp || data.resp.error) {
+                        bootbox.alert("Failed to save Photo Point!");
+                    }
+                    else {
+                        if (!photoPointWithPhotos) {
+                            jsData.poiId = data.resp.poiId;
+                            photoPointWithPhotos = photoPointPhotos(site, jsData, activity.activityId, [], config, !photoPointWithPhotos);
+                            self.photoPoints.push(photoPointWithPhotos);
+                        }
+                        else {
+                            photoPointWithPhotos.photoPoint.update(jsData);
+                        }
+                        cleanup();
+                        if (successCallback) {
+                            successCallback(photoPointWithPhotos);
+                        }
+                    }
+
+                }).fail(function() {
+                    bootbox.alert("Failed to save Photo Point!");
+                });
+            }
+        };
+        model.cancel = function() {
+            cleanup();
+        };
+        ko.applyBindings(model, $(options.newPhotoPointModalSelector)[0]);
+    };
+
+    var newPhotoPointPhotoHolder = ko.observableArray();
+    newPhotoPointPhotoHolder.subscribe(function(photos) {
+        if (!photos[0]) {
+            return;
+        }
+        var data = photos[0];
+
+        if (data.decimalLatitude && data.decimalLongitude) {
+            self.addOrEditPhotoPoint(null, {
+                name: '',
+                description:'',
+                geometry: {
+                    decimalLatitude: data.decimalLatitude,
+                    decimalLongitude  : data.decimalLongitude,
+                    bearing : data.decimalBearing
+                }
+            }, function(newPhotoPointModel) {
+                newPhotoPointModel.files(photos);
+            });
+        }
+        else {
+            bootbox.alert("We couldn't find GPS information in the supplied photo.  The photo point coordinates will default to the site centre.", function() {
+                self.addOrEditPhotoPoint(null, null, function(newPhotoPointModel) {
+                    newPhotoPointModel.files(photos);
+                });
+            });
+        }
+        newPhotoPointPhotoHolder([]);
+    });
+    self.newPhotoPointFromPhotoUploadConfig = {
+        url: (config && config.imageUploadUrl) || fcConfig.imageUploadUrl,
+        target: newPhotoPointPhotoHolder
+    };
+
+    self.modelForSaving = function() {
+        var siteId = site?site.siteId:'';
+        var toSave = {siteId:siteId, photos:[], photoPoints:[]};
+
+        $.each(self.photoPoints(), function(i, photoPoint) {
+            $.each(photoPoint.photos(), function(i, photo) {
+                toSave.photos.push(photo.modelForSaving());
+            });
+        });
+        return toSave;
+    };
+
+    // Simulate the behaviour of the dirty flag manually.
+    self.dirtyFlag = {
+        isDirty:ko.computed(function() {
+            var dirty = false;
+            $.each(self.photoPoints(), function(i, photo) {
+                dirty = dirty || photo.dirtyFlag.isDirty();
+            });
+            return dirty;
+        }),
+        reset:function() {
+            $.each(self.photoPoints(), function(i, photo) {
+                photo.dirtyFlag.reset();
+            });
+        }
+    };
+};
+
+var photoPointPOI = function(data) {
+    if (!data) {
+        data = {
+            geometry:{}
+        };
+    }
+    var name = ko.observable(data.name);
+    var description = ko.observable(data.description);
+    var lat = ko.observable(data.geometry.decimalLatitude);
+    var lng = ko.observable(data.geometry.decimalLongitude);
+    var bearing = ko.observable(data.geometry.bearing);
+
+    var update = function(data) {
+        name(data.name);
+        description(data.description);
+        lat(data.geometry.decimalLatitude);
+        lng(data.geometry.decimalLongitude);
+        bearing(data.geometry.bearing);
+
+    };
+    var modelForSaving = function() {
+        return ko.toJS(returnValue);
+    };
+
+    var returnValue = {
+        poiId:data.poiId,
+        name:name,
+        description:description,
+        geometry:{
+            type:'Point',
+            decimalLatitude:lat,
+            decimalLongitude:lng,
+            bearing:bearing,
+            coordinates:[lng, lat]
+        },
+        type:'photopoint',
+        modelForSaving:modelForSaving,
+        update:update
+    };
+    return returnValue;
+};
+
+var EditPhotoPointViewModel = function(photopoint, map, isNew) {
+    var self = this;
+    self.photoPoint = photoPointPOI(photopoint);
+    self.title = isNew ? "New Photo Point" : "Edit Photo Point";
+    self.newOrEditText = isNew ? "created" : "edited";
+    self.newOrEditText2 = isNew ? "" : "the edits";
+
+    var lat = map.center.lat();
+    var lng = map.center.lng();
+
+
+    if (self.photoPoint.geometry.decimalLatitude()) {
+        lat = self.photoPoint.geometry.decimalLatitude();
+    }
+    else {
+        self.photoPoint.geometry.decimalLatitude(lat);
+    }
+    if (self.photoPoint.geometry.decimalLongitude()) {
+        lng = self.photoPoint.geometry.decimalLongitude();
+    }
+    else {
+        self.photoPoint.geometry.decimalLongitude(lng);
+    }
+
+    var bounds = new google.maps.LatLngBounds();
+    bounds.union(map.getBounds());
+
+    var markerPos = new google.maps.LatLng(lat,lng);
+    var marker = new google.maps.Marker({
+        position: markerPos,
+        draggable:true,
+        map:map
+    });
+    bounds = bounds.extend(markerPos);
+
+    map.fitBounds(bounds);
+
+    self.cleanup = function() {
+        marker.setMap(null);
+    };
+
+    marker.setIcon('https://maps.google.com/mapfiles/marker_yellow.png');
+
+    google.maps.event.addListener(
+        marker,
+        'dragend',
+        function(event) {
+            self.photoPoint.geometry.decimalLatitude(event.latLng.lat());
+            self.photoPoint.geometry.decimalLongitude(event.latLng.lng());
+        }
+    );
+
+};
+
+var photoPointPhotos = function(site, photoPoint, activityId, existingPhotos, config, isNew) {
+
+    var files = ko.observableArray();
+    var photos = ko.observableArray();
+    var photoPoint = photoPointPOI(photoPoint);
+
+    $.each(existingPhotos, function(i, photo) {
+        photos.push(photoPointPhoto(photo));
+    });
+
+    files.subscribe(function(newValue) {
+        var f = newValue.splice(0, newValue.length);
+        for (var i=0; i<f.length; i++) {
+
+            var data = {
+                thumbnailUrl:f[i].thumbnail_url,
+                url:f[i].url,
+                contentType:f[i].contentType,
+                filename:f[i].name,
+                filesize:f[i].size,
+                dateTaken:f[i].isoDate,
+                lat:f[i].decimalLatitude,
+                lng:f[i].decimalLongitude,
+                poiId:photoPoint.poiId,
+                siteId:site.siteId,
+                activityId:activityId,
+                name:site.name+' - '+photoPoint.name(),
+                type:'image'
+
+
+            };
+
+            if (isNew && data.lat && data.lng && !photoPoint.geometry.decimalLatitude() && !photoPoint.geometry.decimalLongitude()) {
+                photoPoint.geometry.decimalLatitude(data.lat);
+                photoPoint.geometry.decimalLongitude(data.lng);
+            }
+
+            photos.push(photoPointPhoto(data));
+        }
+    });
+
+
+    return {
+        photoPoint:photoPoint,
+        photos:photos,
+        files:files,
+
+        uploadConfig : {
+            url: (config && config.imageUploadUrl) || fcConfig.imageUploadUrl,
+            target: files
+        },
+        removePhoto : function (photo) {
+            if (photo.documentId) {
+                photo.status('deleted');
+            }
+            else {
+                photos.remove(photo);
+            }
+        },
+        template : function(photoPoint) {
+            return isNew ? 'editablePhotoPoint' : 'readOnlyPhotoPoint'
+        },
+        isNew : function() { return isNew },
+        dirtyFlag: {
+            isDirty: ko.computed(function() {
+                var tmpPhotos = photos();
+                for (var i=0; i<tmpPhotos.length; i++) {
+                    if (tmpPhotos[i].dirtyFlag.isDirty()) {
+                        return true;
+                    }
+                }
+                return false;
+            }),
+            reset: function() {
+                var tmpPhotos = photos();
+                for (var i=0; i<tmpPhotos.length; i++) {
+                    tmpPhotos[i].dirtyFlag.reset();
+                }
+            }
+        }
+
+    }
+};
+
+var photoPointPhoto = function(data) {
+    if (!data) {
+        data = {};
+    }
+    data.role = 'photoPoint';
+    var result = new DocumentViewModel(data);
+    result.dateTaken = ko.observable(data.dateTaken).extend({simpleDate:false});
+    result.formattedSize = formatBytes(data.filesize);
+
+    for (var prop in data) {
+        if (!result.hasOwnProperty(prop)) {
+            result[prop]= data[prop];
+        }
+    }
+    var docModelForSaving = result.modelForSaving;
+    result.modelForSaving = function() {
+        var js = docModelForSaving();
+        delete js.lat;
+        delete js.lng;
+        delete js.thumbnailUrl;
+        delete js.formattedSize;
+
+        return js;
+    };
+    result.dirtyFlag = ko.dirtyFlag(result, false);
+
+    return result;
+};
+function sortActivities(activities) {
+    activities.sort(function (a,b) {
+
+        if (a.stageOrder !== undefined && b.stageOrder !== undefined && a.stageOrder != b.stageOrder) {
+            return a.stageOrder - b.stageOrder;
+        }
+        if (a.sequence !== undefined && b.sequence !== undefined) {
+            return a.sequence - b.sequence;
+        }
+
+        if (a.plannedStartDate != b.plannedStartDate) {
+            return a.plannedStartDate < b.plannedStartDate ? -1 : (a.plannedStartDate > b.plannedStartDate ? 1 : 0);
+        }
+        var numericActivity = /[Aa]ctivity (\d+)(\w)?.*/;
+        var first = numericActivity.exec(a.description);
+        var second = numericActivity.exec(b.description);
+        if (first && second) {
+            var firstNum = Number(first[1]);
+            var secondNum = Number(second[1]);
+            if (firstNum == secondNum) {
+                // This is to catch activities of the form Activity 1a, Activity 1b etc.
+                if (first.length == 3 && second.length == 3) {
+                    return first[2] > second[2] ? 1 : (first[2] < second[2] ? -1 : 0);
+                }
+            }
+            return  firstNum - secondNum;
+        }
+        else {
+            if (a.dateCreated !== undefined && b.dateCreated !== undefined && a.dateCreated != b.dateCreated) {
+                return a.dateCreated < b.dateCreated ? 1 : -1;
+            }
+            return a.description > b.description ? 1 : (a.description < b.description ? -1 : 0);
+        }
+
+    });
+}
+
+var ActivityNavigationViewModel = function(projectId, activityId, config) {
+    var self = this;
+    self.activities = ko.observableArray();
+
+    self.stages = ko.observableArray();
+    self.selectedStage = ko.observable();
+    self.selectedActivity = ko.observable();
+    self.stageActivities = ko.observableArray();
+
+    self.selectedStage.subscribe(function (newStage) {
+        self.stageActivities( _.filter(self.activities(), function (activity) { return activity.stage == newStage  }));
+        self.selectedActivity(self.nextActivity());
+    });
+    self.hasNext = function() {
+        return self.nextActivity().activityId !== undefined;
+    };
+    self.hasPrevious = function() {
+        return self.previousActivity().activityId !== undefined;
+    };
+    self.nextActivityUrl = function() {
+        if (self.hasNext()) {
+            return config.activityUrl + '/' + self.nextActivity().activityId + (config.returnTo ? '?returnTo=' + encodeURIComponent(config.returnTo) : '');
+        }
+        return '#';
+
+    };
+    self.previousActivityUrl = function() {
+        if (self.hasPrevious()) {
+            return config.activityUrl + '/' + self.previousActivity().activityId + (config.returnTo ? '?returnTo=' + encodeURIComponent(config.returnTo) : '');
+        }
+        return '#';
+
+    };
+    self.nextActivity = function() {
+        return self.activities()[currentActivityIndex()+1] || {};
+    };
+    self.previousActivity = function() {
+        return self.activities()[currentActivityIndex()-1] || {};
+    };
+
+    self.navigateUrl = ko.computed(function() {
+        if (self.selectedActivity()) {
+            return config.activityUrl + '/' +self.selectedActivity().activityId + (config.returnTo ? '?returnTo=' + encodeURIComponent(config.returnTo) : '');
+        }
+        return '#';
+
+    });
+
+    self.returnUrl = config.returnTo;
+
+    function currentActivityIndex() {
+        return _.findIndex(self.activities(), function (activity) {
+           return activity.activityId == activityId;
+        });
+    }
+
+    self.activities.subscribe(function(activities) {
+
+        self.stages(_.uniq(_.pluck(activities, 'stage')));
+
+        if (self.hasNext()) {
+            var next = self.nextActivity();
+            self.selectedStage(next.stage);
+        }
+
+    });
+
+    $.get(config.navigationUrl).done(function (activities) {
+        sortActivities(activities);
+        self.activities(activities);
+    });
+};
 /*!
  * AmplifyJS 1.1.0 - Core, Store, Request
  * 
@@ -2377,6 +2955,13 @@ function DocumentViewModel (doc, owner, settings) {
     this.filetypeImg = function () {
         return self.settings.imageLocation + '/filetypes/' + iconnameFromFilename(self.filename());
     };
+    this.iconImgUrl = function() {
+        if (self.type == 'image' || (self.contentType() && self.contentType().indexOf('image') == 0)) {
+            return self.thumbnailUrl;
+        }
+        return self.filetypeImg();
+    };
+    this.uploadDate = ko.observable(doc.lastUpdated).extend({simpleDate:false});
     this.status = ko.observable(doc.status || 'active');
     this.attribution = ko.observable(doc ? doc.attribution : '');
     this.license = ko.observable(doc ? doc.license : '');
@@ -2631,22 +3216,27 @@ function attachViewModelToFileUpload(uploadUrl, documentViewModel, uiSelector, p
     // We are keeping the reference to the helper here rather than the view model as it doesn't serialize correctly
     // (i.e. calls to toJSON fail).
     documentViewModel.save = function() {
-        if (documentViewModel.filename() && fileUploadHelper !== undefined) {
-            fileUploadHelper.submit();
-            fileUploadHelper = null;
-        }
-        else {
-            // There is no file attachment but we can save the document anyway.
-            $.post(
-                uploadUrl,
-                {document:documentViewModel.toJSONString()},
-                function(result) {
-                    var resp = JSON.parse(result).resp;
-                    documentViewModel.fileUploaded(resp);
-                })
-                .fail(function() {
-                    documentViewModel.fileUploadFailed('Error uploading document');
-                });
+        var result = $(uiSelector).find('form').validationEngine("validate");
+        if (result) {
+
+
+            if (documentViewModel.filename() && fileUploadHelper !== undefined) {
+                fileUploadHelper.submit();
+                fileUploadHelper = null;
+            }
+            else {
+                // There is no file attachment but we can save the document anyway.
+                $.post(
+                    uploadUrl,
+                    {document: documentViewModel.toJSONString()},
+                    function (result) {
+                        var resp = JSON.parse(result).resp;
+                        documentViewModel.fileUploaded(resp);
+                    })
+                    .fail(function () {
+                        documentViewModel.fileUploadFailed('Error uploading document');
+                    });
+            }
         }
     }
 }
@@ -2704,8 +3294,9 @@ function showDocumentAttachInModal(uploadUrl, documentViewModel, modalSelector, 
         $modal.find('form').validationEngine({'custom_error_messages': {
             '#thirdPartyConsentCheckbox': {
                 'required': {'message':'The privacy declaration is required for images viewable by everyone'}
-            }
-        }, 'autoPositionUpdate':true, promptPosition:'inline'});
+            },
+
+        }, scroll:false, autoPositionUpdate:true, promptPosition:'inline'});
     });
 
     return result;
@@ -2813,6 +3404,69 @@ var HelpLinksViewModel = function(helpLinks, validationElementSelector) {
     $(validationElementSelector).validationEngine();
     autoSaveModel(self, fcConfig.documentBulkUpdateUrl, {blockUIOnSave:true});
 };
+
+function initialiseDocumentTable(containerSelector) {
+    var tableSelector = containerSelector + ' .docs-table';
+    var table = $(tableSelector).DataTable(
+        {
+            "columnDefs": [
+                {"type": "alt-string", "targets": 0},
+                {"width":"6em", orderData:[4], "targets": [3]},
+                {"width":"4em", "targets": [2]},
+                {"visible":false, "targets": [4]}
+            ],
+            "order":[[2, 'desc'], [3, 'desc']],
+            "dom":
+            "<'row-fluid'<'span5'l><'span7'f>r>" +
+            "<'row-fluid'<'span12't>>" +
+            "<'row-fluid'<'span6'i><'span6'p>>"
+
+        });
+
+    $(tableSelector +" tr").on('click', function(e) {
+        $(tableSelector + " tr.info").removeClass('info');
+        $(e.currentTarget).addClass("info");
+    });
+
+    function searchStage(searchString) {
+        table.columns(2).search(searchString, true).draw();
+    }
+
+    $(containerSelector + " input[name='stage-filter']").click(function(e) {
+        var searchString = '';
+        $(containerSelector + " input[name='stage-filter']").each(function(val) {
+            var $el = $(this);
+
+            if ($el.is(":checked")) {
+                if (searchString) {
+                    searchString += '|';
+                }
+
+                searchString += $el.val();
+            }
+        });
+
+        searchStage(searchString);
+
+    });
+
+    var filterSelector = containerSelector + ' #filter-by-stage';
+    $(filterSelector + ' a').on('click', function (event) {
+        if (event.target == this) {
+            event.preventDefault();
+            $(this).parent().toggleClass('open');
+        }
+
+    });
+    $('body').on('click', function(e) {
+        if (!$(filterSelector).is(e.target)
+            && $(filterSelector).has(e.target).length === 0
+            && $('.open').has(e.target).length === 0
+        ) {
+            $(filterSelector).removeClass('open');
+        }
+    });
+}
 
 /*
     Utilities for managing project representations.
@@ -3091,7 +3745,10 @@ function ProjectViewModel(project, isUserEditor, organisations) {
     self.orgIdSponsor = ko.observable(project.orgIdSponsor);
     self.orgIdSvcProvider = ko.observable(project.orgIdSvcProvider);
 
-    self.serviceProviderName = ko.observable(project.serviceProviderName);
+    self.serviceProviderName = ko.computed(function() {
+        var org = self.orgIdSvcProvider() && organisationsMap[self.orgIdSvcProvider()];
+        return org? org.name: project.serviceProviderName;
+    });
     self.associatedProgram = ko.observable(); // don't initialise yet - we want the change to trigger dependents
     self.associatedSubProgram = ko.observable(project.associatedSubProgram);
     self.newsAndEvents = ko.observable(project.newsAndEvents).extend({markdown:true});
@@ -3121,10 +3778,15 @@ function ProjectViewModel(project, isUserEditor, organisations) {
     self.contractEndDate = ko.observable(project.contractEndDate).extend({simpleDate: false});
 
     self.transients = self.transients || {};
+    self.transients.programs = [];
+    self.transients.subprograms = {};
+    self.transients.subprogramsToDisplay = ko.computed(function () {
+        return self.transients.subprograms[self.associatedProgram()];
+    });
 
     var isBeforeToday = function(date) {
         return moment(date) < moment().startOf('day');
-    }
+    };
     var calculateDurationInDays = function(startDate, endDate) {
         var start = moment(startDate);
         var end = moment(endDate);
@@ -3143,15 +3805,16 @@ function ProjectViewModel(project, isUserEditor, organisations) {
         return end.toDate().toISOStringNoMillis();
     };
 
-    var contractDatesFixed = function() {
-        var programs = self.transients.programs;
+    self.contractDatesFixed = ko.computed(function() {
+        var programs = (self.transients.programsModel && self.transients.programsModel.programs) || [];
+        var program = self.associatedProgram(); // Checked outside the loop to force the dependency checker to register this variable (the first time this is computed, the array is empty)
         for (var i=0; i<programs.length; i++) {
-            if (programs[i].name === self.associatedProgram()) {
+            if (programs[i].name === program) {
                 return programs[i].projectDatesContracted;
             }
         }
         return true;
-    };
+    });
 
     self.transients.daysRemaining = ko.pureComputed(function() {
         var end = self.plannedEndDate();
@@ -3221,7 +3884,7 @@ function ProjectViewModel(project, isUserEditor, organisations) {
         if (updatingDurations) {
             return;
         }
-        if (contractDatesFixed()) {
+        if (self.contractDatesFixed()) {
             if (!self.plannedEndDate()) {
                 return;
             }
@@ -3285,7 +3948,7 @@ function ProjectViewModel(project, isUserEditor, organisations) {
         if (updatingDurations) {
             return;
         }
-        if (contractDatesFixed()) {
+        if (self.contractDatesFixed()) {
             if (!self.contractEndDate()) {
                 return;
             }
@@ -3312,11 +3975,7 @@ function ProjectViewModel(project, isUserEditor, organisations) {
     });
 
     self.transients.projectId = project.projectId;
-    self.transients.programs = [];
-    self.transients.subprograms = {};
-    self.transients.subprogramsToDisplay = ko.computed(function () {
-        return self.transients.subprograms[self.associatedProgram()];
-    });
+
     self.transients.dataSharingLicenses = [
             {lic:'CC BY', name:'Creative Commons Attribution'},
             {lic:'CC BY-NC', name:'Creative Commons Attribution-NonCommercial'},
@@ -3373,6 +4032,7 @@ function ProjectViewModel(project, isUserEditor, organisations) {
     });
 
     self.loadPrograms = function (programsModel) {
+        self.transients.programsModel = programsModel;
         $.each(programsModel.programs, function (i, program) {
             if (program.readOnly && self.associatedProgram() != program.name) {
                 return;
@@ -3394,21 +4054,24 @@ function ProjectViewModel(project, isUserEditor, organisations) {
     };
 
     // documents
-    var maxStages = project.timeline ? project.timeline.length : 0 ;
+    var docDefaults = newDocumentDefaults(project);
     self.addDocument = function(doc) {
         // check permissions
         if ((isUserEditor && doc.role !== 'approval') ||  doc.public) {
-            doc.maxStages = maxStages;
+            doc.maxStages = docDefaults.maxStages;
             self.documents.push(new DocumentViewModel(doc));
         }
     };
     self.attachDocument = function() {
-        showDocumentAttachInModal(fcConfig.documentUpdateUrl, new DocumentViewModel({role:'information', maxStages: maxStages},{key:'projectId', value:project.projectId}), '#attachDocument')
+        showDocumentAttachInModal(fcConfig.documentUpdateUrl, new DocumentViewModel(docDefaults, {key:'projectId', value:project.projectId}), '#attachDocument')
             .done(function(result){
                 self.documents.push(new DocumentViewModel(result))}
             );
     };
     self.editDocumentMetadata = function(document) {
+        if (!document.maxStages) {
+            document.maxStages = docDefaults.maxStages;
+        }
         var url = fcConfig.documentUpdateUrl + "/" + document.documentId;
         showDocumentAttachInModal( url, document, '#attachDocument')
             .done(function(result){
@@ -3435,6 +4098,15 @@ function ProjectViewModel(project, isUserEditor, organisations) {
         });
     }
 };
+
+function newDocumentDefaults(project) {
+    var reports = project.reports || [];
+    var maxStages = reports.length;
+    var currentStage  = findStageFromDate(reports, new Date().toISOStringNoMillis());
+    currentStage = stageNumberFromStage(currentStage);
+
+    return {role:'information', maxStages: maxStages, stage:currentStage};
+}
 
 /**
  * View model for use by the citizen science project finder page.
@@ -3538,6 +4210,232 @@ function CreateEditProjectViewModel(project, isUserEditor, userOrganisations, or
     autoSaveModel(self, config.projectSaveUrl, {blockUIOnSave:config.blockUIOnSave, blockUISaveMessage:"Saving project...", storageKey:config.storageKey});
 };
 
+
+/* data structures for handling output targets */
+Output = function (name, scores, existingTargets, root) {
+    var self = this;
+    this.name = name;
+    this.outcomeTarget = ko.observable(function () {
+        // find any existing outcome value for this output
+        var outcomeValue = "";
+        $.each(existingTargets, function (j, existingTarget) {
+            if (existingTarget.outcomeTarget && existingTarget.outputLabel === self.name) {
+                outcomeValue = existingTarget.outcomeTarget;
+                return false; // end the loop
+            }
+        });
+        return outcomeValue;
+    }());
+    this.outcomeTarget.subscribe(function() {
+        if (root.targetsEditable()) {
+            self.isSaving(true);
+            root.saveOutputTargets();
+        }
+    });
+    this.scores = $.map(scores, function (score, index) {
+        var targetValue = 0;
+        $.each(existingTargets, function(j, existingTarget) {
+            if (existingTarget.scoreLabel === score.label) {
+                targetValue = existingTarget.target;
+                return false; // end the loop
+            }
+        });
+        return new OutputTarget(score, name, targetValue, index === 0, root);
+    });
+    this.isSaving = ko.observable(false);
+};
+Output.prototype.toJSON = function () {
+    // we need to produce a flat target structure (for backwards compatibility)
+    var self = this,
+        targets = $.map(this.scores, function (score) {
+            var js = score.toJSON();
+
+            return js;
+        });
+    // add the outcome target
+    targets.push({outputLabel:self.name, outcomeTarget: self.outcomeTarget()});
+    return targets;
+};
+Output.prototype.clearSaving = function () {
+    this.isSaving(false);
+    $.each(this.scores, function (i, score) { score.isSaving(false) });
+};
+
+OutputTarget = function (target, outputName, value, isFirst, root) {
+    var self = this;
+    this.outputLabel = outputName;
+    this.scoreName = target.name;
+    this.scoreLabel = target.label;
+    this.target = ko.observable(value).extend({numericString:1});
+    this.isSaving = ko.observable(false);
+    this.isFirst = isFirst;
+    this.units = target.units;
+    this.target.subscribe(function() {
+        if (root.targetsEditable()) {
+            self.isSaving(true);
+            root.saveOutputTargets();
+        }
+    });
+};
+OutputTarget.prototype.toJSON = function () {
+    var clone = ko.toJS(this);
+    delete clone.isSaving;
+    delete clone.isFirst;
+    return clone;
+};
+
+var Outcome = function (target) {
+    var self = this;
+    this.outputLabel = target.outputLabel;
+    this.outcomeText = target.outcomeText;
+    this.isSaving = ko.observable(false);
+};
+
+Outcome.prototype.toJSON = function () {
+    var clone = ko.toJS(this);
+    delete clone.isSaving;
+    return clone;
+};
+function OutputTargets(activities, targets, targetsEditable, targetMetadata, config) {
+
+    var self = this;
+    var defaults = {
+        saveTargetsUrl: fcConfig.projectUpdateUrl
+    };
+    var options = $.extend(defaults, config);
+
+    self.activitiesByOutputName = {};
+
+    var activityTypes = {};  // this just saves us checking multiple activities of the same type
+
+    // collect the metadata for the unique outputs for the current set of activities
+    $.each(activities, function (i, activity) {
+        if (!activityTypes[activity.type] && targetMetadata[activity.type]) {
+            activityTypes[activity.type] = 1;
+            $.each(targetMetadata[activity.type], function(outputName, scores) {
+                if (!self.activitiesByOutputName[outputName]) {
+                    self.activitiesByOutputName[outputName] = [];
+                }
+                self.activitiesByOutputName[outputName].push(activity.type);
+            });
+        }
+        else {
+            activityTypes[activity.type] = activityTypes[activity.type] + 1;
+        }
+    });
+
+    self.findTarget = function(score, outputName) {
+        var foundTarget = null;
+        $.each(self.outputTargets(), function(i, outputAndTargets) {
+            if (outputAndTargets.name == outputName) {
+                $.each(outputAndTargets.scores, function(j, target) {
+                    if (target.scoreLabel == score.label) {
+                        foundTarget = target;
+                        return false;
+                    }
+                });
+            }
+
+        });
+        return foundTarget;
+    };
+
+    self.targetsEditable = targetsEditable;
+
+    self.safeToRemove = function(activityType) {
+
+        var result = true;
+        if (self.onlyActivityOfType(activityType)) { // If there is more than 1 activity of the same type, it's safe to remove the activity
+            if (targetMetadata[activityType]) {
+                $.each(targetMetadata[activityType], function (outputName, scores) {
+                    if (self.activitiesByOutputName[outputName].length == 1) {
+                        $.each(scores, function (i, score) {
+                            var target = self.findTarget(score, outputName);
+                            if (target && target.target() && target.target() != '0') {
+                                result = false;
+                                return false;
+                            }
+                        });
+                    }
+                });
+            }
+        }
+        return result;
+    };
+
+    self.onlyActivityOfType = function(activityType) {
+        return activityTypes[activityType] == 1;
+    };
+
+    self.removeTargetsAssociatedWithActivityType = function(activityType) {
+        var targets = self.outputTargets();
+        $.each(targetMetadata[activityType], function(outputName, scores) {
+            if (self.activitiesByOutputName[outputName].length == 1) {
+                $.each(targets, function(i, outputAndTargets) {
+                    if (outputAndTargets.name == outputName) {
+                        targets.splice(i, 1);
+                        return false;
+                    }
+
+                });
+            }
+        });
+    };
+
+    self.outputTargets = ko.observableArray([]);
+    self.saveOutputTargets = function() {
+        var targets = [];
+        $.each(self.outputTargets(), function (i, target) {
+            $.merge(targets, target.toJSON());
+        });
+
+        var json = JSON.stringify({outputTargets:targets});
+
+        return $.ajax({
+            url: options.saveTargetsUrl,
+            type: 'POST',
+            data: json,
+            contentType: 'application/json',
+            success: function (data) {
+                if (data.error) {
+                    alert(data.detail + ' \n' + data.error);
+                }
+            },
+            error: function (data) {
+                var status = data.status;
+                alert('An unhandled error occurred: ' + data.status);
+            },
+            complete: function(data) {
+                $.each(self.outputTargets(), function(i, target) {
+                    // The timeout is here to ensure the save indicator is visible long enough for the
+                    // user to notice.
+                    setTimeout(function(){target.clearSaving();}, 1000);
+                });
+            }
+        });
+
+    };
+
+    self.loadOutputTargets = function () {
+        var activityTypes = {},  // this just saves us checking multiple activities of the same type
+            uniqueOutputs = {};  // this ensures each output is unique
+        // collect the metadata for the unique outputs for the current set of activities
+        $.each(activities, function (i, activity) {
+            if (!activityTypes[activity.type] && targetMetadata[activity.type]) {
+                activityTypes[activity.type] = true;
+                $.each(targetMetadata[activity.type], function(outputName, scores) {
+                    if (!uniqueOutputs[outputName]) {
+                        uniqueOutputs[outputName] = true;
+                        self.outputTargets.push(new Output(outputName, scores, targets, self));
+                    }
+                });
+            }
+        });
+    }();
+
+
+
+}
 
 var SiteViewModel = function (site, feature) {
     var self = $.extend(this, new Documents());
@@ -3682,8 +4580,10 @@ var SiteViewModel = function (site, feature) {
         }
 
         $.ajax({
-            url: fcConfig.siteMetaDataUrl + "?lat=" + lat + "&lon=" + lng,
-            dataType: "json"
+            url: fcConfig.siteMetaDataUrl,
+            method:"POST",
+            contentType: 'application/json',
+            data:self.modelAsJSON()
         })
             .done(function (data) {
                 var geom = self.extent().geometry();
@@ -3696,8 +4596,7 @@ var SiteViewModel = function (site, feature) {
 
         //do the google geocode lookup
         $.ajax({
-            url: fcConfig.geocodeUrl + lat + "," + lng,
-            async: false
+            url: fcConfig.geocodeUrl + lat + "," + lng
         }).done(function (data) {
             if (data.results.length > 0) {
                 self.extent().geometry().locality(data.results[0].formatted_address);
@@ -3898,7 +4797,8 @@ var PidLocation = function (l) {
 
     // These layers are treated specially.
     var USER_UPLOAD_FID = 'c11083';
-    var OLD_NRM_LAYER_FID = 'cl916';
+    var OLD_NRM_LAYER_FIDS = ['cl916', 'cl2111'];
+
 
     var self = this;
     self.source = ko.observable('pid');
@@ -3939,10 +4839,10 @@ var PidLocation = function (l) {
                 }
             }
         }
-    }
+    };
     //TODO load this from config
     self.layers = ko.observable([
-        {id:'cl2111', name:'NRM'},
+        {id:'cl2120', name:'NRM'},
         {id:'cl1048', name:'IBRA 7 Regions'},
         {id:'cl1049', name:'IBRA 7 Subregions'},
         {id:'cl22',name:'Australian states'},
@@ -3953,8 +4853,8 @@ var PidLocation = function (l) {
     if (l.fid == USER_UPLOAD_FID) {
         self.layers().push({id:USER_UPLOAD_FID, name:'User Uploaded'});
     }
-    else if (l.fid == OLD_NRM_LAYER_FID) {
-        self.layers().push({id:OLD_NRM_LAYER_FID, name:'NRM Regions - pre 2014'});
+    else if ($.inArray(l.fid,OLD_NRM_LAYER_FIDS)) {
+        self.layers().push({id: l.fid, name:'NRM Regions - pre 2015'});
     }
     self.chosenLayer = ko.observable(exists(l,'fid'));
     self.layerObjects = ko.observable([]);
@@ -4283,10 +5183,21 @@ var SitesViewModel =  function(sites, map, mapFeatures, isUserEditor) {
     if (mapFeatures.features) {
         features = mapFeatures.features;
     }
+
     self.sites = $.map(sites, function (site, i) {
         var feature = features[i] || site.extent ? site.extent.geometry : null;
         site.feature = feature;
+        site.selected = ko.observable(false);
         return site;
+    });
+    self.selectedSiteIds = ko.computed(function() {
+        var siteIds = [];
+        $.each(self.sites, function(i, site) {
+            if (site.selected()) {
+                siteIds.push(site.siteId);
+            }
+        });
+        return siteIds;
     });
     self.sitesFilter = ko.observable("");
     self.throttledFilter = ko.computed(self.sitesFilter).extend({throttle: 400});
@@ -4316,79 +5227,137 @@ var SitesViewModel =  function(sites, map, mapFeatures, isUserEditor) {
             $(elem).remove();
         })
     };
-    self.clearSiteFilter = function () {
-        self.sitesFilter("");
-    };
-    self.nextPage = function () {
-        self.offset(self.offset() + self.pageSize);
+
+    var previousIndicies = [];
+    function compareIndicies(indicies1, indicies2) {
+
+        if (indicies1 == indicies2) {
+            return true;
+        }
+
+        if (indicies1.length != indicies2.length) {
+            return false;
+        }
+        for (var i=0; i<indicies1.length; i++) {
+            if (indicies1[i] != indicies2[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+    /** Callback from datatables event listener so we can keep the map in sync with the table filter / pagination */
+    self.sitesFiltered = function(indicies) {
+        if (compareIndicies(indicies || [], previousIndicies)) {
+            return;
+        }
+        self.displayedSites([]);
+        if (indicies) {
+            for (var i=0; i<indicies.length; i++) {
+                self.displayedSites.push(self.sites[indicies[i]]);
+            }
+        }
         self.displaySites();
+        previousIndicies.splice(0, previousIndicies.length);
+        Array.prototype.push.apply(previousIndicies, indicies);
+
     };
-    self.prevPage = function () {
-        self.offset(self.offset() - self.pageSize);
-        self.displaySites();
+
+    self.highlightSite = function(index) {
+        map.highlightFeatureById(self.sites[index].siteId);
     };
+
+    self.unHighlightSite = function(index) {
+        map.unHighlightFeatureById(self.sites[index].siteId);
+    };
+
     self.displaySites = function () {
         map.clearFeatures();
 
-        self.displayedSites(self.filteredSites.slice(self.offset(), self.offset() + self.pageSize));
-
         var features = $.map(self.displayedSites(), function (obj, i) {
-            return obj.feature;
+            var f = obj.feature;
+            f.popup = obj.name;
+            f.id = obj.siteId;
+            return f;
         });
         map.replaceAllFeatures(features);
+        self.removeMarkers();
 
-    };
-
-    self.throttledFilter.subscribe(function (val) {
-        self.offset(0);
-
-        self.filterSites(val);
-    });
-
-    self.filterSites = function (filter) {
-        if (filter) {
-            var regex = new RegExp('\\b' + filter, 'i');
-
-            self.filteredSites([]);
-            $.each(self.sites, function (i, site) {
-                if (regex.test(ko.utils.unwrapObservable(site.name))) {
-                    self.filteredSites.push(site);
-                }
-            });
-            self.displaySites();
-        }
-        else {
-            self.filteredSites(self.sites);
-            self.displaySites();
-        }
-    };
-    self.clearFilter = function (model, event) {
-
-        self.sitesFilter("");
-    };
-
-    this.highlight = function () {
-        map.highlightFeatureById(ko.utils.unwrapObservable(this.name));
-    };
-    this.unhighlight = function () {
-        map.unHighlightFeatureById(ko.utils.unwrapObservable(this.name));
-    };
-    this.removeAllSites = function () {
-        bootbox.confirm("Are you sure you want to remove these sites? This will remove the links to this project but will NOT remove the sites from the site.", function (result) {
-            if (result) {
-                var that = this;
-                $.get(fcConfig.sitesDeleteUrl, function (data) {
-                    if (data.status === 'deleted') {
-                        //self.sites.remove(that);
+        $.each(self.displayedSites(), function(i, site) {
+            if (site.poi) {
+                $.each(site.poi, function(j, poi) {
+                    if (poi.geometry) {
+                        self.addMarker(poi.geometry.decimalLatitude, poi.geometry.decimalLongitude, poi.name);
                     }
-                    //FIXME - currently doing a page reload, not nice
-                    document.location.href = here;
+
+                });
+            }
+        });
+
+    };
+
+    var markersArray = [];
+
+    self.addMarker = function(lat, lng, name) {
+
+        var infowindow = new google.maps.InfoWindow({
+            content: '<span class="poiMarkerPopup">' + name +'</span>'
+        });
+
+        var marker = new google.maps.Marker({
+            position: new google.maps.LatLng(lat,lng),
+            title:name,
+            draggable:false,
+            map:map.map
+        });
+
+        marker.setIcon('https://maps.google.com/mapfiles/marker_yellow.png');
+
+        google.maps.event.addListener(marker, 'click', function() {
+            infowindow.open(map.map, marker);
+        });
+
+        markersArray.push(marker);
+    };
+
+    self.removeMarkers = function() {
+        if (markersArray) {
+            for (var i in markersArray) {
+                markersArray[i].setMap(null);
+            }
+        }
+        markersArray = [];
+    };
+
+
+    this.removeSelectedSites = function () {
+        bootbox.confirm("Are you sure you want to remove these sites?", function (result) {
+            if (result) {
+                var siteIds = self.selectedSiteIds();
+
+                $.ajax({
+                    url: fcConfig.sitesDeleteUrl,
+                    type: 'POST',
+                    data: JSON.stringify({siteIds:siteIds}),
+                    contentType: 'application/json'
+                }).done(function(data) {
+                    if (data.warnings && data.warnings.length) {
+                        bootbox.alert("Not all sites were able to be deleted.  Sites associated with an activity were not deleted.", function() {
+                            document.location.href = here;
+                        });
+                    }
+                    else {
+                        document.location.href = here;
+                    }
+                }).fail(function(data) {
+                    bootbox.alert("An error occurred while deleting the sites.  Please contact support if the problem persists.", function() {
+                        document.location.href = here;
+                    })
                 });
             }
         });
     };
     this.editSite = function (site) {
-        var url = fcConfig.siteEditUrl + '/' + site.siteId + '?returnTo=' + fcConfig.returnTo;
+        var url = fcConfig.siteEditUrl + '/' + site.siteId + '?returnTo=' + encodeURIComponent(fcConfig.returnTo);
         document.location.href = url;
     };
     this.deleteSite = function (site) {
@@ -4396,20 +5365,19 @@ var SitesViewModel =  function(sites, map, mapFeatures, isUserEditor) {
             if (result) {
 
                 $.get(fcConfig.siteDeleteUrl + '?siteId=' + site.siteId, function (data) {
-                    $.each(self.sites, function (i, tmpSite) {
-                        if (site.siteId === tmpSite.siteId) {
-                            self.sites.splice(i, 1);
-                            return false;
-                        }
-                    });
-                    self.filterSites(self.sitesFilter());
+                    if (data.warnings && data.warnings.length) {
+                        bootbox.alert("The site could not be deleted as it is used by a project activity.");
+                    }
+                    else {
+                        document.location.href = here;
+                    }
                 });
 
             }
         });
     };
     this.viewSite = function (site) {
-        var url = fcConfig.siteViewUrl + '/' + site.siteId + '?returnTo=' + fcConfig.returnTo;
+        var url = fcConfig.siteViewUrl + '/' + site.siteId + '?returnTo=' + encodeURIComponent(fcConfig.returnTo);
         document.location.href = url;
     };
     this.addSite = function () {
@@ -4494,13 +5462,6 @@ function representsRectangle(path) {
     }
     return true
 }
-//! moment.js
-//! version : 2.10.0
-//! authors : Tim Wood, Iskren Chernev, Moment.js contributors
-//! license : MIT
-//! momentjs.com
-!function(a,b){"object"==typeof exports&&"undefined"!=typeof module?module.exports=b():"function"==typeof define&&define.amd?define(b):a.moment=b()}(this,function(){"use strict";function a(){return Ac.apply(null,arguments)}function b(a){Ac=a}function c(){return{empty:!1,unusedTokens:[],unusedInput:[],overflow:-2,charsLeftOver:0,nullInput:!1,invalidMonth:null,invalidFormat:!1,userInvalidated:!1,iso:!1}}function d(a){return"[object Array]"===Object.prototype.toString.call(a)}function e(a){return"[object Date]"===Object.prototype.toString.call(a)||a instanceof Date}function f(a,b){var c,d=[];for(c=0;c<a.length;++c)d.push(b(a[c],c));return d}function g(a,b){return Object.prototype.hasOwnProperty.call(a,b)}function h(a,b){for(var c in b)g(b,c)&&(a[c]=b[c]);return g(b,"toString")&&(a.toString=b.toString),g(b,"valueOf")&&(a.valueOf=b.valueOf),a}function i(a,b,c,d){return ya(a,b,c,d,!0).utc()}function j(a){return null==a._isValid&&(a._isValid=!isNaN(a._d.getTime())&&a._pf.overflow<0&&!a._pf.empty&&!a._pf.invalidMonth&&!a._pf.nullInput&&!a._pf.invalidFormat&&!a._pf.userInvalidated,a._strict&&(a._isValid=a._isValid&&0===a._pf.charsLeftOver&&0===a._pf.unusedTokens.length&&void 0===a._pf.bigHour)),a._isValid}function k(a){var b=i(0/0);return null!=a?h(b._pf,a):b._pf.userInvalidated=!0,b}function l(a,b){var c,d,e;if("undefined"!=typeof b._isAMomentObject&&(a._isAMomentObject=b._isAMomentObject),"undefined"!=typeof b._i&&(a._i=b._i),"undefined"!=typeof b._f&&(a._f=b._f),"undefined"!=typeof b._l&&(a._l=b._l),"undefined"!=typeof b._strict&&(a._strict=b._strict),"undefined"!=typeof b._tzm&&(a._tzm=b._tzm),"undefined"!=typeof b._isUTC&&(a._isUTC=b._isUTC),"undefined"!=typeof b._offset&&(a._offset=b._offset),"undefined"!=typeof b._pf&&(a._pf=b._pf),"undefined"!=typeof b._locale&&(a._locale=b._locale),Cc.length>0)for(c in Cc)d=Cc[c],e=b[d],"undefined"!=typeof e&&(a[d]=e);return a}function m(b){l(this,b),this._d=new Date(+b._d),Dc===!1&&(Dc=!0,a.updateOffset(this),Dc=!1)}function n(a){return a instanceof m||null!=a&&g(a,"_isAMomentObject")}function o(a){var b=+a,c=0;return 0!==b&&isFinite(b)&&(c=b>=0?Math.floor(b):Math.ceil(b)),c}function p(a,b,c){var d,e=Math.min(a.length,b.length),f=Math.abs(a.length-b.length),g=0;for(d=0;e>d;d++)(c&&a[d]!==b[d]||!c&&o(a[d])!==o(b[d]))&&g++;return g+f}function q(){}function r(a){return a?a.toLowerCase().replace("_","-"):a}function s(a){for(var b,c,d,e,f=0;f<a.length;){for(e=r(a[f]).split("-"),b=e.length,c=r(a[f+1]),c=c?c.split("-"):null;b>0;){if(d=t(e.slice(0,b).join("-")))return d;if(c&&c.length>=b&&p(e,c,!0)>=b-1)break;b--}f++}return null}function t(a){var b=null;if(!Ec[a]&&"undefined"!=typeof module&&module&&module.exports)try{b=Bc._abbr,require("./locale/"+a),u(b)}catch(c){}return Ec[a]}function u(a,b){var c;return a&&(c="undefined"==typeof b?w(a):v(a,b),c&&(Bc=c)),Bc._abbr}function v(a,b){return null!==b?(b.abbr=a,Ec[a]||(Ec[a]=new q),Ec[a].set(b),u(a),Ec[a]):(delete Ec[a],null)}function w(a){var b;if(a&&a._locale&&a._locale._abbr&&(a=a._locale._abbr),!a)return Bc;if(!d(a)){if(b=t(a))return b;a=[a]}return s(a)}function x(a,b){var c=a.toLowerCase();Fc[c]=Fc[c+"s"]=Fc[b]=a}function y(a){return"string"==typeof a?Fc[a]||Fc[a.toLowerCase()]:void 0}function z(a){var b,c,d={};for(c in a)g(a,c)&&(b=y(c),b&&(d[b]=a[c]));return d}function A(b,c){return function(d){return null!=d?(C(this,b,d),a.updateOffset(this,c),this):B(this,b)}}function B(a,b){return a._d["get"+(a._isUTC?"UTC":"")+b]()}function C(a,b,c){return a._d["set"+(a._isUTC?"UTC":"")+b](c)}function D(a,b){var c;if("object"==typeof a)for(c in a)this.set(c,a[c]);else if(a=y(a),"function"==typeof this[a])return this[a](b);return this}function E(a,b,c){for(var d=""+Math.abs(a),e=a>=0;d.length<b;)d="0"+d;return(e?c?"+":"":"-")+d}function F(a,b,c,d){var e=d;"string"==typeof d&&(e=function(){return this[d]()}),a&&(Jc[a]=e),b&&(Jc[b[0]]=function(){return E(e.apply(this,arguments),b[1],b[2])}),c&&(Jc[c]=function(){return this.localeData().ordinal(e.apply(this,arguments),a)})}function G(a){return a.match(/\[[\s\S]/)?a.replace(/^\[|\]$/g,""):a.replace(/\\/g,"")}function H(a){var b,c,d=a.match(Gc);for(b=0,c=d.length;c>b;b++)d[b]=Jc[d[b]]?Jc[d[b]]:G(d[b]);return function(e){var f="";for(b=0;c>b;b++)f+=d[b]instanceof Function?d[b].call(e,a):d[b];return f}}function I(a,b){return a.isValid()?(b=J(b,a.localeData()),Ic[b]||(Ic[b]=H(b)),Ic[b](a)):a.localeData().invalidDate()}function J(a,b){function c(a){return b.longDateFormat(a)||a}var d=5;for(Hc.lastIndex=0;d>=0&&Hc.test(a);)a=a.replace(Hc,c),Hc.lastIndex=0,d-=1;return a}function K(a,b,c){Yc[a]="function"==typeof b?b:function(a){return a&&c?c:b}}function L(a,b){return g(Yc,a)?Yc[a](b._strict,b._locale):new RegExp(M(a))}function M(a){return a.replace("\\","").replace(/\\(\[)|\\(\])|\[([^\]\[]*)\]|\\(.)/g,function(a,b,c,d,e){return b||c||d||e}).replace(/[-\/\\^$*+?.()|[\]{}]/g,"\\$&")}function N(a,b){var c,d=b;for("string"==typeof a&&(a=[a]),"number"==typeof b&&(d=function(a,c){c[b]=o(a)}),c=0;c<a.length;c++)Zc[a[c]]=d}function O(a,b){N(a,function(a,c,d,e){d._w=d._w||{},b(a,d._w,d,e)})}function P(a,b,c){null!=b&&g(Zc,a)&&Zc[a](b,c._a,c,a)}function Q(a,b){return new Date(Date.UTC(a,b+1,0)).getUTCDate()}function R(a){return this._months[a.month()]}function S(a){return this._monthsShort[a.month()]}function T(a,b,c){var d,e,f;for(this._monthsParse||(this._monthsParse=[],this._longMonthsParse=[],this._shortMonthsParse=[]),d=0;12>d;d++){if(e=i([2e3,d]),c&&!this._longMonthsParse[d]&&(this._longMonthsParse[d]=new RegExp("^"+this.months(e,"").replace(".","")+"$","i"),this._shortMonthsParse[d]=new RegExp("^"+this.monthsShort(e,"").replace(".","")+"$","i")),c||this._monthsParse[d]||(f="^"+this.months(e,"")+"|^"+this.monthsShort(e,""),this._monthsParse[d]=new RegExp(f.replace(".",""),"i")),c&&"MMMM"===b&&this._longMonthsParse[d].test(a))return d;if(c&&"MMM"===b&&this._shortMonthsParse[d].test(a))return d;if(!c&&this._monthsParse[d].test(a))return d}}function U(a,b){var c;return"string"==typeof b&&(b=a.localeData().monthsParse(b),"number"!=typeof b)?a:(c=Math.min(a.date(),Q(a.year(),b)),a._d["set"+(a._isUTC?"UTC":"")+"Month"](b,c),a)}function V(b){return null!=b?(U(this,b),a.updateOffset(this,!0),this):B(this,"Month")}function W(){return Q(this.year(),this.month())}function X(a){var b,c=a._a;return c&&-2===a._pf.overflow&&(b=c[_c]<0||c[_c]>11?_c:c[ad]<1||c[ad]>Q(c[$c],c[_c])?ad:c[bd]<0||c[bd]>24||24===c[bd]&&(0!==c[cd]||0!==c[dd]||0!==c[ed])?bd:c[cd]<0||c[cd]>59?cd:c[dd]<0||c[dd]>59?dd:c[ed]<0||c[ed]>999?ed:-1,a._pf._overflowDayOfYear&&($c>b||b>ad)&&(b=ad),a._pf.overflow=b),a}function Y(b){a.suppressDeprecationWarnings===!1&&"undefined"!=typeof console&&console.warn&&console.warn("Deprecation warning: "+b)}function Z(a,b){var c=!0;return h(function(){return c&&(Y(a),c=!1),b.apply(this,arguments)},b)}function $(a,b){hd[a]||(Y(b),hd[a]=!0)}function _(a){var b,c,d=a._i,e=id.exec(d);if(e){for(a._pf.iso=!0,b=0,c=jd.length;c>b;b++)if(jd[b][1].exec(d)){a._f=jd[b][0]+(e[6]||" ");break}for(b=0,c=kd.length;c>b;b++)if(kd[b][1].exec(d)){a._f+=kd[b][0];break}d.match(Vc)&&(a._f+="Z"),sa(a)}else a._isValid=!1}function aa(b){var c=ld.exec(b._i);return null!==c?void(b._d=new Date(+c[1])):(_(b),void(b._isValid===!1&&(delete b._isValid,a.createFromInputFallback(b))))}function ba(a,b,c,d,e,f,g){var h=new Date(a,b,c,d,e,f,g);return 1970>a&&h.setFullYear(a),h}function ca(a){var b=new Date(Date.UTC.apply(null,arguments));return 1970>a&&b.setUTCFullYear(a),b}function da(a){return ea(a)?366:365}function ea(a){return a%4===0&&a%100!==0||a%400===0}function fa(){return ea(this.year())}function ga(a,b,c){var d,e=c-b,f=c-a.day();return f>e&&(f-=7),e-7>f&&(f+=7),d=za(a).add(f,"d"),{week:Math.ceil(d.dayOfYear()/7),year:d.year()}}function ha(a){return ga(a,this._week.dow,this._week.doy).week}function ia(){return this._week.dow}function ja(){return this._week.doy}function ka(a){var b=this.localeData().week(this);return null==a?b:this.add(7*(a-b),"d")}function la(a){var b=ga(this,1,4).week;return null==a?b:this.add(7*(a-b),"d")}function ma(a,b,c,d,e){var f,g,h=ca(a,0,1).getUTCDay();return h=0===h?7:h,c=null!=c?c:e,f=e-h+(h>d?7:0)-(e>h?7:0),g=7*(b-1)+(c-e)+f+1,{year:g>0?a:a-1,dayOfYear:g>0?g:da(a-1)+g}}function na(a){var b=Math.round((this.clone().startOf("day")-this.clone().startOf("year"))/864e5)+1;return null==a?b:this.add(a-b,"d")}function oa(a,b,c){return null!=a?a:null!=b?b:c}function pa(a){var b=new Date;return a._useUTC?[b.getUTCFullYear(),b.getUTCMonth(),b.getUTCDate()]:[b.getFullYear(),b.getMonth(),b.getDate()]}function qa(a){var b,c,d,e,f=[];if(!a._d){for(d=pa(a),a._w&&null==a._a[ad]&&null==a._a[_c]&&ra(a),a._dayOfYear&&(e=oa(a._a[$c],d[$c]),a._dayOfYear>da(e)&&(a._pf._overflowDayOfYear=!0),c=ca(e,0,a._dayOfYear),a._a[_c]=c.getUTCMonth(),a._a[ad]=c.getUTCDate()),b=0;3>b&&null==a._a[b];++b)a._a[b]=f[b]=d[b];for(;7>b;b++)a._a[b]=f[b]=null==a._a[b]?2===b?1:0:a._a[b];24===a._a[bd]&&0===a._a[cd]&&0===a._a[dd]&&0===a._a[ed]&&(a._nextDay=!0,a._a[bd]=0),a._d=(a._useUTC?ca:ba).apply(null,f),null!=a._tzm&&a._d.setUTCMinutes(a._d.getUTCMinutes()-a._tzm),a._nextDay&&(a._a[bd]=24)}}function ra(a){var b,c,d,e,f,g,h;b=a._w,null!=b.GG||null!=b.W||null!=b.E?(f=1,g=4,c=oa(b.GG,a._a[$c],ga(za(),1,4).year),d=oa(b.W,1),e=oa(b.E,1)):(f=a._locale._week.dow,g=a._locale._week.doy,c=oa(b.gg,a._a[$c],ga(za(),f,g).year),d=oa(b.w,1),null!=b.d?(e=b.d,f>e&&++d):e=null!=b.e?b.e+f:f),h=ma(c,d,e,g,f),a._a[$c]=h.year,a._dayOfYear=h.dayOfYear}function sa(b){if(b._f===a.ISO_8601)return void _(b);b._a=[],b._pf.empty=!0;var c,d,e,f,g,h=""+b._i,i=h.length,j=0;for(e=J(b._f,b._locale).match(Gc)||[],c=0;c<e.length;c++)f=e[c],d=(h.match(L(f,b))||[])[0],d&&(g=h.substr(0,h.indexOf(d)),g.length>0&&b._pf.unusedInput.push(g),h=h.slice(h.indexOf(d)+d.length),j+=d.length),Jc[f]?(d?b._pf.empty=!1:b._pf.unusedTokens.push(f),P(f,d,b)):b._strict&&!d&&b._pf.unusedTokens.push(f);b._pf.charsLeftOver=i-j,h.length>0&&b._pf.unusedInput.push(h),b._pf.bigHour===!0&&b._a[bd]<=12&&(b._pf.bigHour=void 0),b._a[bd]=ta(b._locale,b._a[bd],b._meridiem),qa(b),X(b)}function ta(a,b,c){var d;return null==c?b:null!=a.meridiemHour?a.meridiemHour(b,c):null!=a.isPM?(d=a.isPM(c),d&&12>b&&(b+=12),d||12!==b||(b=0),b):b}function ua(a){var b,d,e,f,g;if(0===a._f.length)return a._pf.invalidFormat=!0,void(a._d=new Date(0/0));for(f=0;f<a._f.length;f++)g=0,b=l({},a),null!=a._useUTC&&(b._useUTC=a._useUTC),b._pf=c(),b._f=a._f[f],sa(b),j(b)&&(g+=b._pf.charsLeftOver,g+=10*b._pf.unusedTokens.length,b._pf.score=g,(null==e||e>g)&&(e=g,d=b));h(a,d||b)}function va(a){if(!a._d){var b=z(a._i);a._a=[b.year,b.month,b.day||b.date,b.hour,b.minute,b.second,b.millisecond],qa(a)}}function wa(a){var b,c=a._i,e=a._f;return a._locale=a._locale||w(a._l),null===c||void 0===e&&""===c?k({nullInput:!0}):("string"==typeof c&&(a._i=c=a._locale.preparse(c)),n(c)?new m(X(c)):(d(e)?ua(a):e?sa(a):xa(a),b=new m(X(a)),b._nextDay&&(b.add(1,"d"),b._nextDay=void 0),b))}function xa(b){var c=b._i;void 0===c?b._d=new Date:e(c)?b._d=new Date(+c):"string"==typeof c?aa(b):d(c)?(b._a=f(c.slice(0),function(a){return parseInt(a,10)}),qa(b)):"object"==typeof c?va(b):"number"==typeof c?b._d=new Date(c):a.createFromInputFallback(b)}function ya(a,b,d,e,f){var g={};return"boolean"==typeof d&&(e=d,d=void 0),g._isAMomentObject=!0,g._useUTC=g._isUTC=f,g._l=d,g._i=a,g._f=b,g._strict=e,g._pf=c(),wa(g)}function za(a,b,c,d){return ya(a,b,c,d,!1)}function Aa(a,b){var c,e;if(1===b.length&&d(b[0])&&(b=b[0]),!b.length)return za();for(c=b[0],e=1;e<b.length;++e)b[e][a](c)&&(c=b[e]);return c}function Ba(){var a=[].slice.call(arguments,0);return Aa("isBefore",a)}function Ca(){var a=[].slice.call(arguments,0);return Aa("isAfter",a)}function Da(a){var b=z(a),c=b.year||0,d=b.quarter||0,e=b.month||0,f=b.week||0,g=b.day||0,h=b.hour||0,i=b.minute||0,j=b.second||0,k=b.millisecond||0;this._milliseconds=+k+1e3*j+6e4*i+36e5*h,this._days=+g+7*f,this._months=+e+3*d+12*c,this._data={},this._locale=w(),this._bubble()}function Ea(a){return a instanceof Da}function Fa(a,b){F(a,0,0,function(){var a=this.utcOffset(),c="+";return 0>a&&(a=-a,c="-"),c+E(~~(a/60),2)+b+E(~~a%60,2)})}function Ga(a){var b=(a||"").match(Vc)||[],c=b[b.length-1]||[],d=(c+"").match(qd)||["-",0,0],e=+(60*d[1])+o(d[2]);return"+"===d[0]?e:-e}function Ha(b,c){var d,f;return c._isUTC?(d=c.clone(),f=(n(b)||e(b)?+b:+za(b))-+d,d._d.setTime(+d._d+f),a.updateOffset(d,!1),d):za(b).local();return c._isUTC?za(b).zone(c._offset||0):za(b).local()}function Ia(a){return 15*-Math.round(a._d.getTimezoneOffset()/15)}function Ja(b,c){var d,e=this._offset||0;return null!=b?("string"==typeof b&&(b=Ga(b)),Math.abs(b)<16&&(b=60*b),!this._isUTC&&c&&(d=Ia(this)),this._offset=b,this._isUTC=!0,null!=d&&this.add(d,"m"),e!==b&&(!c||this._changeInProgress?Za(this,Ua(b-e,"m"),1,!1):this._changeInProgress||(this._changeInProgress=!0,a.updateOffset(this,!0),this._changeInProgress=null)),this):this._isUTC?e:Ia(this)}function Ka(a,b){return null!=a?("string"!=typeof a&&(a=-a),this.utcOffset(a,b),this):-this.utcOffset()}function La(a){return this.utcOffset(0,a)}function Ma(a){return this._isUTC&&(this.utcOffset(0,a),this._isUTC=!1,a&&this.subtract(Ia(this),"m")),this}function Na(){return this._tzm?this.utcOffset(this._tzm):"string"==typeof this._i&&this.utcOffset(Ga(this._i)),this}function Oa(a){return a=a?za(a).utcOffset():0,(this.utcOffset()-a)%60===0}function Pa(){return this.utcOffset()>this.clone().month(0).utcOffset()||this.utcOffset()>this.clone().month(5).utcOffset()}function Qa(){if(this._a){var a=this._isUTC?i(this._a):za(this._a);return this.isValid()&&p(this._a,a.toArray())>0}return!1}function Ra(){return!this._isUTC}function Sa(){return this._isUTC}function Ta(){return this._isUTC&&0===this._offset}function Ua(a,b){var c,d,e,f=a,h=null;return Ea(a)?f={ms:a._milliseconds,d:a._days,M:a._months}:"number"==typeof a?(f={},b?f[b]=a:f.milliseconds=a):(h=rd.exec(a))?(c="-"===h[1]?-1:1,f={y:0,d:o(h[ad])*c,h:o(h[bd])*c,m:o(h[cd])*c,s:o(h[dd])*c,ms:o(h[ed])*c}):(h=sd.exec(a))?(c="-"===h[1]?-1:1,f={y:Va(h[2],c),M:Va(h[3],c),d:Va(h[4],c),h:Va(h[5],c),m:Va(h[6],c),s:Va(h[7],c),w:Va(h[8],c)}):null==f?f={}:"object"==typeof f&&("from"in f||"to"in f)&&(e=Xa(za(f.from),za(f.to)),f={},f.ms=e.milliseconds,f.M=e.months),d=new Da(f),Ea(a)&&g(a,"_locale")&&(d._locale=a._locale),d}function Va(a,b){var c=a&&parseFloat(a.replace(",","."));return(isNaN(c)?0:c)*b}function Wa(a,b){var c={milliseconds:0,months:0};return c.months=b.month()-a.month()+12*(b.year()-a.year()),a.clone().add(c.months,"M").isAfter(b)&&--c.months,c.milliseconds=+b-+a.clone().add(c.months,"M"),c}function Xa(a,b){var c;return b=Ha(b,a),a.isBefore(b)?c=Wa(a,b):(c=Wa(b,a),c.milliseconds=-c.milliseconds,c.months=-c.months),c}function Ya(a,b){return function(c,d){var e,f;return null===d||isNaN(+d)||($(b,"moment()."+b+"(period, number) is deprecated. Please use moment()."+b+"(number, period)."),f=c,c=d,d=f),c="string"==typeof c?+c:c,e=Ua(c,d),Za(this,e,a),this}}function Za(b,c,d,e){var f=c._milliseconds,g=c._days,h=c._months;e=null==e?!0:e,f&&b._d.setTime(+b._d+f*d),g&&C(b,"Date",B(b,"Date")+g*d),h&&U(b,B(b,"Month")+h*d),e&&a.updateOffset(b,g||h)}function $a(a){var b=a||za(),c=Ha(b,this).startOf("day"),d=this.diff(c,"days",!0),e=-6>d?"sameElse":-1>d?"lastWeek":0>d?"lastDay":1>d?"sameDay":2>d?"nextDay":7>d?"nextWeek":"sameElse";return this.format(this.localeData().calendar(e,this,za(b)))}function _a(){return new m(this)}function ab(a,b){var c;return b=y("undefined"!=typeof b?b:"millisecond"),"millisecond"===b?(a=n(a)?a:za(a),+this>+a):(c=n(a)?+a:+za(a),c<+this.clone().startOf(b))}function bb(a,b){var c;return b=y("undefined"!=typeof b?b:"millisecond"),"millisecond"===b?(a=n(a)?a:za(a),+a>+this):(c=n(a)?+a:+za(a),+this.clone().endOf(b)<c)}function cb(a,b,c){return this.isAfter(a,c)&&this.isBefore(b,c)}function db(a,b){var c;return b=y(b||"millisecond"),"millisecond"===b?(a=n(a)?a:za(a),+this===+a):(c=+za(a),+this.clone().startOf(b)<=c&&c<=+this.clone().endOf(b))}function eb(a){return 0>a?Math.ceil(a):Math.floor(a)}function fb(a,b,c){var d,e,f=Ha(a,this),g=6e4*(f.utcOffset()-this.utcOffset());return b=y(b),"year"===b||"month"===b||"quarter"===b?(e=gb(this,f),"quarter"===b?e/=3:"year"===b&&(e/=12)):(d=this-f,e="second"===b?d/1e3:"minute"===b?d/6e4:"hour"===b?d/36e5:"day"===b?(d-g)/864e5:"week"===b?(d-g)/6048e5:d),c?e:eb(e)}function gb(a,b){var c,d,e=12*(b.year()-a.year())+(b.month()-a.month()),f=a.clone().add(e,"months");return 0>b-f?(c=a.clone().add(e-1,"months"),d=(b-f)/(f-c)):(c=a.clone().add(e+1,"months"),d=(b-f)/(c-f)),-(e+d)}function hb(){return this.clone().locale("en").format("ddd MMM DD YYYY HH:mm:ss [GMT]ZZ")}function ib(){var a=this.clone().utc();return 0<a.year()&&a.year()<=9999?"function"==typeof Date.prototype.toISOString?this.toDate().toISOString():I(a,"YYYY-MM-DD[T]HH:mm:ss.SSS[Z]"):I(a,"YYYYYY-MM-DD[T]HH:mm:ss.SSS[Z]")}function jb(b){var c=I(this,b||a.defaultFormat);return this.localeData().postformat(c)}function kb(a,b){return Ua({to:this,from:a}).locale(this.locale()).humanize(!b)}function lb(a){return this.from(za(),a)}function mb(a){var b;return void 0===a?this._locale._abbr:(b=w(a),null!=b&&(this._locale=b),this)}function nb(){return this._locale}function ob(a){switch(a=y(a)){case"year":this.month(0);case"quarter":case"month":this.date(1);case"week":case"isoWeek":case"day":this.hours(0);case"hour":this.minutes(0);case"minute":this.seconds(0);case"second":this.milliseconds(0)}return"week"===a&&this.weekday(0),"isoWeek"===a&&this.isoWeekday(1),"quarter"===a&&this.month(3*Math.floor(this.month()/3)),this}function pb(a){return a=y(a),void 0===a||"millisecond"===a?this:this.startOf(a).add(1,"isoWeek"===a?"week":a).subtract(1,"ms")}function qb(){return+this._d-6e4*(this._offset||0)}function rb(){return Math.floor(+this/1e3)}function sb(){return this._offset?new Date(+this):this._d}function tb(){var a=this;return[a.year(),a.month(),a.date(),a.hour(),a.minute(),a.second(),a.millisecond()]}function ub(){return j(this)}function vb(){return h({},this._pf)}function wb(){return this._pf.overflow}function xb(a,b){F(0,[a,a.length],0,b)}function yb(a,b,c){return ga(za([a,11,31+b-c]),b,c).week}function zb(a){var b=ga(this,this.localeData()._week.dow,this.localeData()._week.doy).year;return null==a?b:this.add(a-b,"y")}function Ab(a){var b=ga(this,1,4).year;return null==a?b:this.add(a-b,"y")}function Bb(){return yb(this.year(),1,4)}function Cb(){var a=this.localeData()._week;return yb(this.year(),a.dow,a.doy)}function Db(a){return null==a?Math.ceil((this.month()+1)/3):this.month(3*(a-1)+this.month()%3)}function Eb(a,b){if("string"==typeof a)if(isNaN(a)){if(a=b.weekdaysParse(a),"number"!=typeof a)return null}else a=parseInt(a,10);return a}function Fb(a){return this._weekdays[a.day()]}function Gb(a){return this._weekdaysShort[a.day()]}function Hb(a){return this._weekdaysMin[a.day()]}function Ib(a){var b,c,d;for(this._weekdaysParse||(this._weekdaysParse=[]),b=0;7>b;b++)if(this._weekdaysParse[b]||(c=za([2e3,1]).day(b),d="^"+this.weekdays(c,"")+"|^"+this.weekdaysShort(c,"")+"|^"+this.weekdaysMin(c,""),this._weekdaysParse[b]=new RegExp(d.replace(".",""),"i")),this._weekdaysParse[b].test(a))return b}function Jb(a){var b=this._isUTC?this._d.getUTCDay():this._d.getDay();return null!=a?(a=Eb(a,this.localeData()),this.add(a-b,"d")):b}function Kb(a){var b=(this.day()+7-this.localeData()._week.dow)%7;return null==a?b:this.add(a-b,"d")}function Lb(a){return null==a?this.day()||7:this.day(this.day()%7?a:a-7)}function Mb(a,b){F(a,0,0,function(){return this.localeData().meridiem(this.hours(),this.minutes(),b)})}function Nb(a,b){return b._meridiemParse}function Ob(a){return"p"===(a+"").toLowerCase().charAt(0)}function Pb(a,b,c){return a>11?c?"pm":"PM":c?"am":"AM"}function Qb(a){F(0,[a,3],0,"millisecond")}function Rb(){return this._isUTC?"UTC":""}function Sb(){return this._isUTC?"Coordinated Universal Time":""}function Tb(a){return za(1e3*a)}function Ub(){return za.apply(null,arguments).parseZone()}function Vb(a,b,c){var d=this._calendar[a];return"function"==typeof d?d.call(b,c):d}function Wb(a){var b=this._longDateFormat[a];return!b&&this._longDateFormat[a.toUpperCase()]&&(b=this._longDateFormat[a.toUpperCase()].replace(/MMMM|MM|DD|dddd/g,function(a){return a.slice(1)}),this._longDateFormat[a]=b),b}function Xb(){return this._invalidDate}function Yb(a){return this._ordinal.replace("%d",a)}function Zb(a){return a}function $b(a,b,c,d){var e=this._relativeTime[c];return"function"==typeof e?e(a,b,c,d):e.replace(/%d/i,a)}function _b(a,b){var c=this._relativeTime[a>0?"future":"past"];return"function"==typeof c?c(b):c.replace(/%s/i,b)}function ac(a){var b,c;for(c in a)b=a[c],"function"==typeof b?this[c]=b:this["_"+c]=b;this._ordinalParseLenient=new RegExp(this._ordinalParse.source+"|"+/\d{1,2}/.source)}function bc(a,b,c,d){var e=w(),f=i().set(d,b);return e[c](f,a)}function cc(a,b,c,d,e){if("number"==typeof a&&(b=a,a=void 0),a=a||"",null!=b)return bc(a,b,c,e);var f,g=[];for(f=0;d>f;f++)g[f]=bc(a,f,c,e);return g}function dc(a,b){return cc(a,b,"months",12,"month")}function ec(a,b){return cc(a,b,"monthsShort",12,"month")}function fc(a,b){return cc(a,b,"weekdays",7,"day")}function gc(a,b){return cc(a,b,"weekdaysShort",7,"day")}function hc(a,b){return cc(a,b,"weekdaysMin",7,"day")}function ic(){var a=this._data;return this._milliseconds=Od(this._milliseconds),this._days=Od(this._days),this._months=Od(this._months),a.milliseconds=Od(a.milliseconds),a.seconds=Od(a.seconds),a.minutes=Od(a.minutes),a.hours=Od(a.hours),a.months=Od(a.months),a.years=Od(a.years),this}function jc(a,b,c,d){var e=Ua(b,c);return a._milliseconds+=d*e._milliseconds,a._days+=d*e._days,a._months+=d*e._months,a._bubble()}function kc(a,b){return jc(this,a,b,1)}function lc(a,b){return jc(this,a,b,-1)}function mc(){var a,b,c,d=this._milliseconds,e=this._days,f=this._months,g=this._data,h=0;return g.milliseconds=d%1e3,a=eb(d/1e3),g.seconds=a%60,b=eb(a/60),g.minutes=b%60,c=eb(b/60),g.hours=c%24,e+=eb(c/24),h=eb(nc(e)),e-=eb(oc(h)),f+=eb(e/30),e%=30,h+=eb(f/12),f%=12,g.days=e,g.months=f,g.years=h,this}function nc(a){return 400*a/146097}function oc(a){return 146097*a/400}function pc(a){var b,c,d=this._milliseconds;if(a=y(a),"month"===a||"year"===a)return b=this._days+d/864e5,c=this._months+12*nc(b),"month"===a?c:c/12;switch(b=this._days+Math.round(oc(this._months/12)),a){case"week":return b/7+d/6048e5;case"day":return b+d/864e5;case"hour":return 24*b+d/36e5;case"minute":return 24*b*60+d/6e4;case"second":return 24*b*60*60+d/1e3;case"millisecond":return Math.floor(24*b*60*60*1e3)+d;default:throw new Error("Unknown unit "+a)}}function qc(){return this._milliseconds+864e5*this._days+this._months%12*2592e6+31536e6*o(this._months/12)}function rc(a){return function(){return this.as(a)}}function sc(a){return a=y(a),this[a+"s"]()}function tc(a){return function(){return this._data[a]}}function uc(){return eb(this.days()/7)}function vc(a,b,c,d,e){return e.relativeTime(b||1,!!c,a,d)}function wc(a,b,c){var d=Ua(a).abs(),e=ce(d.as("s")),f=ce(d.as("m")),g=ce(d.as("h")),h=ce(d.as("d")),i=ce(d.as("M")),j=ce(d.as("y")),k=e<de.s&&["s",e]||1===f&&["m"]||f<de.m&&["mm",f]||1===g&&["h"]||g<de.h&&["hh",g]||1===h&&["d"]||h<de.d&&["dd",h]||1===i&&["M"]||i<de.M&&["MM",i]||1===j&&["y"]||["yy",j];return k[2]=b,k[3]=+a>0,k[4]=c,vc.apply(null,k)}function xc(a,b){return void 0===de[a]?!1:void 0===b?de[a]:(de[a]=b,!0)}function yc(a){var b=this.localeData(),c=wc(this,!a,b);return a&&(c=b.pastFuture(+this,c)),b.postformat(c)}function zc(){var a=ee(this.years()),b=ee(this.months()),c=ee(this.days()),d=ee(this.hours()),e=ee(this.minutes()),f=ee(this.seconds()+this.milliseconds()/1e3),g=this.asSeconds();return g?(0>g?"-":"")+"P"+(a?a+"Y":"")+(b?b+"M":"")+(c?c+"D":"")+(d||e||f?"T":"")+(d?d+"H":"")+(e?e+"M":"")+(f?f+"S":""):"P0D"}var Ac,Bc,Cc=a.momentProperties=[],Dc=!1,Ec={},Fc={},Gc=/(\[[^\[]*\])|(\\)?(Mo|MM?M?M?|Do|DDDo|DD?D?D?|ddd?d?|do?|w[o|w]?|W[o|W]?|Q|YYYYYY|YYYYY|YYYY|YY|gg(ggg?)?|GG(GGG?)?|e|E|a|A|hh?|HH?|mm?|ss?|S{1,4}|x|X|zz?|ZZ?|.)/g,Hc=/(\[[^\[]*\])|(\\)?(LTS|LT|LL?L?L?|l{1,4})/g,Ic={},Jc={},Kc=/\d/,Lc=/\d\d/,Mc=/\d{3}/,Nc=/\d{4}/,Oc=/[+-]?\d{6}/,Pc=/\d\d?/,Qc=/\d{1,3}/,Rc=/\d{1,4}/,Sc=/[+-]?\d{1,6}/,Tc=/\d+/,Uc=/[+-]?\d+/,Vc=/Z|[+-]\d\d:?\d\d/gi,Wc=/[+-]?\d+(\.\d{1,3})?/,Xc=/[0-9]*['a-z\u00A0-\u05FF\u0700-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]+|[\u0600-\u06FF\/]+(\s*?[\u0600-\u06FF]+){1,2}/i,Yc={},Zc={},$c=0,_c=1,ad=2,bd=3,cd=4,dd=5,ed=6;F("M",["MM",2],"Mo",function(){return this.month()+1}),F("MMM",0,0,function(a){return this.localeData().monthsShort(this,a)}),F("MMMM",0,0,function(a){return this.localeData().months(this,a)}),x("month","M"),K("M",Pc),K("MM",Pc,Lc),K("MMM",Xc),K("MMMM",Xc),N(["M","MM"],function(a,b){b[_c]=o(a)-1}),N(["MMM","MMMM"],function(a,b,c,d){var e=c._locale.monthsParse(a,d,c._strict);null!=e?b[_c]=e:c._pf.invalidMonth=a});var fd="January_February_March_April_May_June_July_August_September_October_November_December".split("_"),gd="Jan_Feb_Mar_Apr_May_Jun_Jul_Aug_Sep_Oct_Nov_Dec".split("_"),hd={};a.suppressDeprecationWarnings=!1;var id=/^\s*(?:[+-]\d{6}|\d{4})-(?:(\d\d-\d\d)|(W\d\d$)|(W\d\d-\d)|(\d\d\d))((T| )(\d\d(:\d\d(:\d\d(\.\d+)?)?)?)?([\+\-]\d\d(?::?\d\d)?|\s*Z)?)?$/,jd=[["YYYYYY-MM-DD",/[+-]\d{6}-\d{2}-\d{2}/],["YYYY-MM-DD",/\d{4}-\d{2}-\d{2}/],["GGGG-[W]WW-E",/\d{4}-W\d{2}-\d/],["GGGG-[W]WW",/\d{4}-W\d{2}/],["YYYY-DDD",/\d{4}-\d{3}/]],kd=[["HH:mm:ss.SSSS",/(T| )\d\d:\d\d:\d\d\.\d+/],["HH:mm:ss",/(T| )\d\d:\d\d:\d\d/],["HH:mm",/(T| )\d\d:\d\d/],["HH",/(T| )\d\d/]],ld=/^\/?Date\((\-?\d+)/i;a.createFromInputFallback=Z("moment construction falls back to js Date. This is discouraged and will be removed in upcoming major release. Please refer to https://github.com/moment/moment/issues/1407 for more info.",function(a){a._d=new Date(a._i+(a._useUTC?" UTC":""))}),F(0,["YY",2],0,function(){return this.year()%100}),F(0,["YYYY",4],0,"year"),F(0,["YYYYY",5],0,"year"),F(0,["YYYYYY",6,!0],0,"year"),x("year","y"),K("Y",Uc),K("YY",Pc,Lc),K("YYYY",Rc,Nc),K("YYYYY",Sc,Oc),K("YYYYYY",Sc,Oc),N(["YYYY","YYYYY","YYYYYY"],$c),N("YY",function(b,c){c[$c]=a.parseTwoDigitYear(b)}),a.parseTwoDigitYear=function(a){return o(a)+(o(a)>68?1900:2e3)};var md=A("FullYear",!1);F("w",["ww",2],"wo","week"),F("W",["WW",2],"Wo","isoWeek"),x("week","w"),x("isoWeek","W"),K("w",Pc),K("ww",Pc,Lc),K("W",Pc),K("WW",Pc,Lc),O(["w","ww","W","WW"],function(a,b,c,d){b[d.substr(0,1)]=o(a)});var nd={dow:0,doy:6};F("DDD",["DDDD",3],"DDDo","dayOfYear"),x("dayOfYear","DDD"),K("DDD",Qc),K("DDDD",Mc),N(["DDD","DDDD"],function(a,b,c){c._dayOfYear=o(a)}),a.ISO_8601=function(){};var od=Z("moment().min is deprecated, use moment.min instead. https://github.com/moment/moment/issues/1548",function(){var a=za.apply(null,arguments);return this>a?this:a}),pd=Z("moment().max is deprecated, use moment.max instead. https://github.com/moment/moment/issues/1548",function(){var a=za.apply(null,arguments);return a>this?this:a});Fa("Z",":"),Fa("ZZ",""),K("Z",Vc),K("ZZ",Vc),N(["Z","ZZ"],function(a,b,c){c._useUTC=!0,c._tzm=Ga(a)});var qd=/([\+\-]|\d\d)/gi;a.updateOffset=function(){};var rd=/(\-)?(?:(\d*)\.)?(\d+)\:(\d+)(?:\:(\d+)\.?(\d{3})?)?/,sd=/^(-)?P(?:(?:([0-9,.]*)Y)?(?:([0-9,.]*)M)?(?:([0-9,.]*)D)?(?:T(?:([0-9,.]*)H)?(?:([0-9,.]*)M)?(?:([0-9,.]*)S)?)?|([0-9,.]*)W)$/,td=Ya(1,"add"),ud=Ya(-1,"subtract");a.defaultFormat="YYYY-MM-DDTHH:mm:ssZ";var vd=Z("moment().lang() is deprecated. Instead, use moment().localeData() to get the language configuration. Use moment().locale() to change languages.",function(a){return void 0===a?this.localeData():this.locale(a)});F(0,["gg",2],0,function(){return this.weekYear()%100}),F(0,["GG",2],0,function(){return this.isoWeekYear()%100}),xb("gggg","weekYear"),xb("ggggg","weekYear"),xb("GGGG","isoWeekYear"),xb("GGGGG","isoWeekYear"),x("weekYear","gg"),x("isoWeekYear","GG"),K("G",Uc),K("g",Uc),K("GG",Pc,Lc),K("gg",Pc,Lc),K("GGGG",Rc,Nc),K("gggg",Rc,Nc),K("GGGGG",Sc,Oc),K("ggggg",Sc,Oc),O(["gggg","ggggg","GGGG","GGGGG"],function(a,b,c,d){b[d.substr(0,2)]=o(a)}),O(["gg","GG"],function(b,c,d,e){c[e]=a.parseTwoDigitYear(b)}),F("Q",0,0,"quarter"),x("quarter","Q"),K("Q",Kc),N("Q",function(a,b){b[_c]=3*(o(a)-1)}),F("D",["DD",2],"Do","date"),x("date","D"),K("D",Pc),K("DD",Pc,Lc),K("Do",function(a,b){return a?b._ordinalParse:b._ordinalParseLenient}),N(["D","DD"],ad),N("Do",function(a,b){b[ad]=o(a.match(Pc)[0],10)});var wd=A("Date",!0);F("d",0,"do","day"),F("dd",0,0,function(a){return this.localeData().weekdaysMin(this,a)}),F("ddd",0,0,function(a){return this.localeData().weekdaysShort(this,a)}),F("dddd",0,0,function(a){return this.localeData().weekdays(this,a)}),F("e",0,0,"weekday"),F("E",0,0,"isoWeekday"),x("day","d"),x("weekday","e"),x("isoWeekday","E"),K("d",Pc),K("e",Pc),K("E",Pc),K("dd",Xc),K("ddd",Xc),K("dddd",Xc),O(["dd","ddd","dddd"],function(a,b,c){var d=c._locale.weekdaysParse(a);null!=d?b.d=d:c._pf.invalidWeekday=a}),O(["d","e","E"],function(a,b,c,d){b[d]=o(a)});var xd="Sunday_Monday_Tuesday_Wednesday_Thursday_Friday_Saturday".split("_"),yd="Sun_Mon_Tue_Wed_Thu_Fri_Sat".split("_"),zd="Su_Mo_Tu_We_Th_Fr_Sa".split("_");F("H",["HH",2],0,"hour"),F("h",["hh",2],0,function(){return this.hours()%12||12}),Mb("a",!0),Mb("A",!1),x("hour","h"),K("a",Nb),K("A",Nb),K("H",Pc),K("h",Pc),K("HH",Pc,Lc),K("hh",Pc,Lc),N(["H","HH"],bd),N(["a","A"],function(a,b,c){c._isPm=c._locale.isPM(a),c._meridiem=a}),N(["h","hh"],function(a,b,c){b[bd]=o(a),c._pf.bigHour=!0});var Ad=/[ap]\.?m?\.?/i,Bd=A("Hours",!0);F("m",["mm",2],0,"minute"),x("minute","m"),K("m",Pc),K("mm",Pc,Lc),N(["m","mm"],cd);var Cd=A("Minutes",!1);F("s",["ss",2],0,"second"),x("second","s"),K("s",Pc),K("ss",Pc,Lc),N(["s","ss"],dd);var Dd=A("Seconds",!1);F("S",0,0,function(){return~~(this.millisecond()/100)}),F(0,["SS",2],0,function(){return~~(this.millisecond()/10)}),Qb("SSS"),Qb("SSSS"),x("millisecond","ms"),K("S",Qc,Kc),K("SS",Qc,Lc),K("SSS",Qc,Mc),K("SSSS",Tc),N(["S","SS","SSS","SSSS"],function(a,b){b[ed]=o(1e3*("0."+a))});var Ed=A("Milliseconds",!1);F("z",0,0,"zoneAbbr"),F("zz",0,0,"zoneName");var Fd=m.prototype;Fd.add=td,Fd.calendar=$a,Fd.clone=_a,Fd.diff=fb,Fd.endOf=pb,Fd.format=jb,Fd.from=kb,Fd.fromNow=lb,Fd.get=D,Fd.invalidAt=wb,Fd.isAfter=ab,Fd.isBefore=bb,Fd.isBetween=cb,Fd.isSame=db,Fd.isValid=ub,Fd.lang=vd,Fd.locale=mb,Fd.localeData=nb,Fd.max=pd,Fd.min=od,Fd.parsingFlags=vb,Fd.set=D,Fd.startOf=ob,Fd.subtract=ud,Fd.toArray=tb,Fd.toDate=sb,Fd.toISOString=ib,Fd.toJSON=ib,Fd.toString=hb,Fd.unix=rb,Fd.valueOf=qb,Fd.year=md,Fd.isLeapYear=fa,Fd.weekYear=zb,Fd.isoWeekYear=Ab,Fd.quarter=Fd.quarters=Db,Fd.month=V,Fd.daysInMonth=W,Fd.week=Fd.weeks=ka,Fd.isoWeek=Fd.isoWeeks=la,Fd.weeksInYear=Cb,Fd.isoWeeksInYear=Bb,Fd.date=wd,Fd.day=Fd.days=Jb,Fd.weekday=Kb,Fd.isoWeekday=Lb,Fd.dayOfYear=na,Fd.hour=Fd.hours=Bd,Fd.minute=Fd.minutes=Cd,Fd.second=Fd.seconds=Dd,Fd.millisecond=Fd.milliseconds=Ed,Fd.utcOffset=Ja,Fd.utc=La,Fd.local=Ma,Fd.parseZone=Na,Fd.hasAlignedHourOffset=Oa,Fd.isDST=Pa,Fd.isDSTShifted=Qa,Fd.isLocal=Ra,Fd.isUtcOffset=Sa,Fd.isUtc=Ta,Fd.isUTC=Ta,Fd.zoneAbbr=Rb,Fd.zoneName=Sb,Fd.dates=Z("dates accessor is deprecated. Use date instead.",wd),Fd.months=Z("months accessor is deprecated. Use month instead",V),Fd.years=Z("years accessor is deprecated. Use year instead",md),Fd.zone=Z("moment().zone is deprecated, use moment().utcOffset instead. https://github.com/moment/moment/issues/1779",Ka);var Gd=Fd,Hd={sameDay:"[Today at] LT",nextDay:"[Tomorrow at] LT",nextWeek:"dddd [at] LT",lastDay:"[Yesterday at] LT",lastWeek:"[Last] dddd [at] LT",sameElse:"L"},Id={LTS:"h:mm:ss A",LT:"h:mm A",L:"MM/DD/YYYY",LL:"MMMM D, YYYY",LLL:"MMMM D, YYYY LT",LLLL:"dddd, MMMM D, YYYY LT"},Jd="Invalid date",Kd="%d",Ld=/\d{1,2}/,Md={future:"in %s",past:"%s ago",s:"a few seconds",m:"a minute",mm:"%d minutes",h:"an hour",hh:"%d hours",d:"a day",dd:"%d days",M:"a month",MM:"%d months",y:"a year",yy:"%d years"},Nd=q.prototype;Nd._calendar=Hd,Nd.calendar=Vb,Nd._longDateFormat=Id,Nd.longDateFormat=Wb,Nd._invalidDate=Jd,Nd.invalidDate=Xb,Nd._ordinal=Kd,Nd.ordinal=Yb,Nd._ordinalParse=Ld,Nd.preparse=Zb,Nd.postformat=Zb,
-    Nd._relativeTime=Md,Nd.relativeTime=$b,Nd.pastFuture=_b,Nd.set=ac,Nd.months=R,Nd._months=fd,Nd.monthsShort=S,Nd._monthsShort=gd,Nd.monthsParse=T,Nd.week=ha,Nd._week=nd,Nd.firstDayOfYear=ja,Nd.firstDayOfWeek=ia,Nd.weekdays=Fb,Nd._weekdays=xd,Nd.weekdaysMin=Hb,Nd._weekdaysMin=zd,Nd.weekdaysShort=Gb,Nd._weekdaysShort=yd,Nd.weekdaysParse=Ib,Nd.isPM=Ob,Nd._meridiemParse=Ad,Nd.meridiem=Pb,u("en",{ordinalParse:/\d{1,2}(th|st|nd|rd)/,ordinal:function(a){var b=a%10,c=1===o(a%100/10)?"th":1===b?"st":2===b?"nd":3===b?"rd":"th";return a+c}}),a.lang=Z("moment.lang is deprecated. Use moment.locale instead.",u),a.langData=Z("moment.langData is deprecated. Use moment.localeData instead.",w);var Od=Math.abs,Pd=rc("ms"),Qd=rc("s"),Rd=rc("m"),Sd=rc("h"),Td=rc("d"),Ud=rc("w"),Vd=rc("M"),Wd=rc("y"),Xd=tc("milliseconds"),Yd=tc("seconds"),Zd=tc("minutes"),$d=tc("hours"),_d=tc("days"),ae=tc("months"),be=tc("years"),ce=Math.round,de={s:45,m:45,h:22,d:26,M:11},ee=Math.abs,fe=Da.prototype;fe.abs=ic,fe.add=kc,fe.subtract=lc,fe.as=pc,fe.asMilliseconds=Pd,fe.asSeconds=Qd,fe.asMinutes=Rd,fe.asHours=Sd,fe.asDays=Td,fe.asWeeks=Ud,fe.asMonths=Vd,fe.asYears=Wd,fe.valueOf=qc,fe._bubble=mc,fe.get=sc,fe.milliseconds=Xd,fe.seconds=Yd,fe.minutes=Zd,fe.hours=$d,fe.days=_d,fe.weeks=uc,fe.months=ae,fe.years=be,fe.humanize=yc,fe.toISOString=zc,fe.toString=zc,fe.toJSON=zc,fe.locale=mb,fe.localeData=nb,fe.toIsoString=Z("toIsoString() is deprecated. Please use toISOString() instead (notice the capitals)",zc),fe.lang=vd,F("X",0,0,"unix"),F("x",0,0,"valueOf"),K("x",Uc),K("X",Wc),N("X",function(a,b,c){c._d=new Date(1e3*parseFloat(a,10))}),N("x",function(a,b,c){c._d=new Date(o(a))}),a.version="2.10.0",b(za),a.fn=Gd,a.min=Ba,a.max=Ca,a.utc=i,a.unix=Tb,a.months=dc,a.isDate=e,a.locale=u,a.invalid=k,a.duration=Ua,a.isMoment=n,a.weekdays=fc,a.parseZone=Ub,a.localeData=w,a.isDuration=Ea,a.monthsShort=ec,a.weekdaysMin=hc,a.defineLocale=v,a.weekdaysShort=gc,a.normalizeUnits=y,a.relativeTimeThreshold=xc;var ge=a;return ge});
 /*!
  * jQuery Cookie Plugin v1.4.0
  * https://github.com/carhartl/jquery-cookie
@@ -4618,10 +5579,14 @@ function representsRectangle(path) {
 
 
 
-var ActivityViewModel = function(activity) {
+var GreenArmyActivityViewModel = function(activity) {
     var self = this;
     $.extend(self, activity);
 
+    self.name = activity.name;
+    self.description = activity.description;
+    self.projectId = activity.projectId;
+    self.progress = activity.progress;
     self.publicationStatus = activity.publicationStatus ? activity.publicationStatus : 'unpublished';
     self.editable = (self.publicationStatus == 'unpublished');
     self.activityDetailsUrl = self.editable ? fcConfig.activityEditUrl+'/'+activity.activityId+'?returnTo='+fcConfig.organisationViewUrl :
@@ -4634,8 +5599,14 @@ var ReportViewModel = function(report) {
     $.extend(this, report);
     var self = this;
 
-    self.dueDate = ko.observable(report.dueDate).extend({simpleDate:false})
+    self.description = report.description || report.name;
+    self.fromDate = ko.observable(report.fromDate).extend({simpleDate:false});
+    self.toDate =  ko.observable(report.toDate).extend({simpleDate:false});
+    self.dueDate = ko.observable(report.dueDate).extend({simpleDate:false});
+    self.progress = ko.observable(report.progress || 'planned');
     self.editUrl = '';
+    self.viewUrl = fcConfig.organisationReportUrl + '?&reportId='+report.reportId;
+    self.downloadUrl = fcConfig.organisationReportPDFUrl+'/'+report.reportId;
     self.percentComplete = function() {
         if (report.count == 0) {
             return 0;
@@ -4643,29 +5614,37 @@ var ReportViewModel = function(report) {
         return report.finishedCount / report.count * 100;
     }();
 
+    self.reason = ko.observable();
+    self.category = ko.observable();
+
+    self.period = ko.computed(function() {
+        return self.fromDate.formattedDate() + ' - ' + self.toDate.formattedDate();
+    });
+
     self.toggleActivities = function() {
         self.activitiesVisible(!self.activitiesVisible());
     };
     self.activitiesVisible = ko.observable(false);
     self.activities = [];
-    $.each(report.activities, function(i, activity) {
-        self.activities.push(new ActivityViewModel(activity));
+    $.each(report.activities || [], function(i, activity) {
+        self.activities.push(new GreenArmyActivityViewModel(activity));
     });
-    self.editable = (report.bulkEditable || self.activities.length == 1) && (report.publicationStatus != 'published' && report.publicationStatus != 'pendingApproval');
+    self.editable = (report.bulkEditable || self.activities.length == 0 || self.activities.length == 1) && (report.publicationStatus != 'published' && report.publicationStatus != 'pendingApproval');
 
     self.title = 'Expand the activity list to complete the reports';
-    if (report.bulkEditable) {
-        self.title = 'Click to complete the reports in a spreadsheet format';
-        self.editUrl = fcConfig.organisationReportUrl + '?type='+report.type+'&plannedStartDate='+report.plannedStartDate+'&plannedEndDate='+report.plannedEndDate+'&returnTo='+fcConfig.returnTo;
-    }
-    else if (self.editable) {
+    if (self.editable) {
         self.title = 'Click to complete the report';
-        self.editUrl = fcConfig.activityEditUrl + '/' + self.activities[0].activityId + '?returnTo='+fcConfig.organisationViewUrl;
+        self.editUrl = fcConfig.organisationReportUrl + '?edit=true&reportId='+report.reportId;
     }
+
+    self.viewable = self.progress() == 'finished';
+
     self.isReportable = function() {
-        return (report.plannedEndDate < new Date().toISOStringNoMillis());
+        return (report.toDate < new Date().toISOStringNoMillis());
     };
-    self.complete = (report.finishedCount == report.count);
+    self.complete = ko.computed(function() {
+        return self.isReportable() && self.progress() == 'finished' && self.editable;
+    });
     self.approvalTemplate = function() {
         if (!self.isReportable()) {
             return 'notReportable';
@@ -4684,8 +5663,7 @@ var ReportViewModel = function(report) {
 
     self.changeReportStatus = function(url, action, blockingMessage, successMessage) {
         blockUIWithMessage(blockingMessage);
-        var activityIds = $.map(self.activities, function(activity) {return activity.activityId;});
-        var json = JSON.stringify({activityIds:activityIds});
+        var json = JSON.stringify({reportId:report.reportId, category:self.category(), reason:self.reason()});
         $.ajax({
             url: url,
             type: 'POST',
@@ -4706,7 +5684,7 @@ var ReportViewModel = function(report) {
                 }
             }
         });
-    }
+    };
     self.approveReport = function() {
         self.changeReportStatus(fcConfig.approveReportUrl, 'approve', 'Approving report...', 'Report approved.');
     };
@@ -4723,12 +5701,27 @@ var ReportViewModel = function(report) {
         $(declaration).modal({ backdrop: 'static', keyboard: true, show: true }).on('hidden', function() {ko.cleanNode(declaration);});
 
     };
-    self.rejectReport = function() {
-        self.changeReportStatus(fcConfig.rejectReportUrl, 'reject', 'Rejecting report...', 'Report rejected.');
+
+    this.rejectReport = function() {
+        var $reasonModal = $('#reason-modal');
+        var reasonViewModel = {
+            reason: self.reason,
+            rejectionCategories: ['Minor', 'Moderate', 'Major'],
+            rejectionCategory: self.category,
+            title:'Return report',
+            buttonText: 'Return',
+            submit:function() {
+                if ($('.validationEngineContainer').validationEngine('attach').validationEngine('validate')) {
+                    self.changeReportStatus(fcConfig.rejectReportUrl, 'return', 'Returning report...', 'Report returned.');
+                }
+            }
+        };
+        ko.applyBindings(reasonViewModel, $reasonModal[0]);
+        $reasonModal.modal({backdrop: 'static', keyboard:true, show:true}).on('hidden', function() {ko.cleanNode($reasonModal[0])});
     };
 };
 
-var ReportsViewModel = function(reports, projects) {
+var ReportsViewModel = function(reports, projects, availableReports) {
     var self = this;
     self.projects = projects;
     self.allReports = ko.observableArray(reports);
@@ -4736,18 +5729,16 @@ var ReportsViewModel = function(reports, projects) {
     self.hideFutureReports = ko.observable(true);
 
     self.filteredReports = ko.computed(function() {
-        if (!self.hideApprovedReports() && !self.hideFutureReports()) {
-            return self.allReports();
-        }
+
         var filteredReports = [];
-        var nextMonth = moment().add(1, 'months').format();
+        var now = moment().toDate().toISOStringNoMillis();
 
         $.each(self.allReports(), function(i, report) {
             if (self.hideApprovedReports() && report.publicationStatus === 'published') {
                 return;
             }
 
-            if (self.hideFutureReports() && report.dueDate > nextMonth) {
+            if (self.hideFutureReports() && report.fromDate > now) {
                 return;
             }
             filteredReports.push(new ReportViewModel(report));
@@ -4765,6 +5756,14 @@ var ReportsViewModel = function(reports, projects) {
 
     self.editReport = function(report) {
         window.location = report.editUrl;
+    };
+
+    self.viewReport = function(report) {
+        window.open(report.viewUrl, 'view-report');
+    };
+
+    self.downloadReport = function(report) {
+        window.open(report.downloadUrl, 'download-report');
     };
 
     self.viewAllReports = function(report) {
@@ -4800,40 +5799,46 @@ var ReportsViewModel = function(reports, projects) {
     // Data model for the new report dialog.
     var AdHocReportViewModel = function() {
 
+        var defaultFromDate = '2014-07-01T10:00:00Z';
+        var defaultToDate = '2015-07-01T10:00:00Z';
+        if (reports && reports.length) {
+            for (var i=0; i<reports.length; i++) {
+                if (reports[i].toDate > defaultToDate) {
+                    defaultToDate = reports[i].toDate;
+                    defaultFromDate = reports[i].fromDate;
+                }
+            }
+        }
+        defaultFromDate = moment(defaultFromDate).add(1, 'years').toDate().toISOStringNoMillis();
+        defaultToDate = moment(defaultToDate).add(1, 'years').toDate().toISOStringNoMillis();
+
         var self = this;
-        self.project =ko.observable();
         self.type = ko.observable();
 
-        self.projectId = ko.computed(function() {
-            if (self.project()) {
-                return self.project().projectId;
-            }
-        });
-        self.plannedStartDate = ko.computed(function() {
-            if (self.project()) {
-                return self.project().plannedStartDate;
-            }
-        });
-        self.plannedEndDate = ko.computed(function() {
-            if (self.project()) {
-                return self.project().plannedEndDate;
-            }
-        });
-        self.availableReports = ko.observableArray([]);
+        self.organisationId = ko.observable();
 
-        self.project.subscribe(function(project) {
-            $.get(fcConfig.adHocReportsUrl+'/'+project.projectId).done(function(data) {
-                self.availableReports(data);
-            })
+        self.fromDate = ko.observable(defaultFromDate).extend({simpleDate:false});
+        self.toDate = ko.observable(defaultToDate).extend({simpleDate:false});
 
+        self.availableReports = availableReports;
+
+        self.name = ko.computed(function() {
+            var fromDate = moment(self.fromDate());
+            var toDate = moment(self.toDate());
+
+            return fromDate.get('year') + ' / ' + toDate.get('year') + ' ' + self.type();
+        });
+
+        self.dueDate = ko.computed(function() {
+            var toDate = moment(self.toDate()).add(1, 'months').add(15, 'days');
+            return toDate.toDate().toISOStringNoMillis();
         });
 
         self.save = function() {
-            var reportDetails = ko.mapping.toJS(this, {'ignore':['project', 'save']});
+            var reportDetails = JSON.stringify(ko.mapping.toJS(this, {'ignore':['project', 'save', 'availableReports']}));
 
-            var reportUrl = fcConfig.reportCreateUrl + '?' + $.param(reportDetails) + '&returnTo='+fcConfig.organisationViewUrl;
-
-            window.location.href = reportUrl;
+            var reportUrl = fcConfig.reportCreateUrl;
+            $.ajax({method:'POST', url:reportUrl, data:reportDetails, success:function() {window.location.reload()}, contentType:'application/json'});
         };
     };
     self.newReport = new AdHocReportViewModel();
@@ -4846,9 +5851,10 @@ var ReportsViewModel = function(reports, projects) {
  * Manages the species data type in the output model.
  * Allows species information to be searched for and displayed.
  */
-var SpeciesViewModel = function(data, speciesLists) {
+var SpeciesViewModel = function(data, speciesLists, options) {
 
     var self = this;
+
     self.guid = ko.observable();
     self.name = ko.observable();
     self.listId = ko.observable();
@@ -4931,15 +5937,16 @@ var SpeciesViewModel = function(data, speciesLists) {
         self['listId'](orBlank(data.listId));
 
         self.transients.textFieldValue(self.name());
-        if (self.guid()) {
+        if (self.guid() && !options.printable) {
 
-            var profileUrl = fcConfig.bieUrl + '/species/' + self.guid();
+            var profileUrl = fcConfig.bieUrl + '/species/' + encodeURIComponent(self.guid());
             $.ajax({
-                url: fcConfig.speciesProfileUrl+'/' + self.guid(),
+                url: fcConfig.speciesProfileUrl+'/' + encodeURIComponent(self.guid()),
                 dataType: 'json',
                 success: function (data) {
                     var profileInfo = '<a href="'+profileUrl+'" target="_blank">';
-                    var imageUrl = data.taxonConcept.smallImageUrl;
+                    var imageUrl = data.thumbnail || (data.taxonConcept && data.taxonConcept.smallImageUrl);
+
                     if (imageUrl) {
                         profileInfo += "<img title='Click to show profile' class='taxon-image ui-corner-all' src='"+imageUrl+"'>";
                     }

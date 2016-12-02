@@ -13,5 +13,6 @@
  #define REST_SERVER @"http://fieldcapture-dev.ala.org.au"
  #define REST_SERVER @"https://fieldcapture-test.ala.org.au"
 */
-#define REST_SERVER @"https://fieldcapture.ala.org.au"
+#define REST_SERVER  @"https://fieldcapture.ala.org.au"
+#define REGISTER_URL @"https://auth.ala.org.au/userdetails/registration/createAccount"
 #endif

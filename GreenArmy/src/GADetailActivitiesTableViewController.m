@@ -21,6 +21,11 @@
 @property (strong, nonatomic) UIPopoverController *masterPopoverController;
 @property (strong, nonatomic) GAProjectsUtil *projectsUtil;
 @property (strong, nonatomic) UIActionSheet *actionSheetShare;
+
+// Replaced action sheet with JGActionSheet to include cancel option.
+@property (strong, nonatomic) JGActionSheet *menu;
+@property (strong, nonatomic) JGActionSheetSection *sort;
+
 - (void)configureView;
 @end
 
@@ -162,28 +167,45 @@
 
 -(void)actionPhotoShare:(id)sender
 {
-    if(self.actionSheetShare == nil){
-        self.actionSheetShare = [[UIActionSheet alloc] initWithTitle:@"SORT BY ACTIVITY"
-                                                       delegate:self
-                                              cancelButtonTitle:nil
-                                         destructiveButtonTitle:nil
-                                              otherButtonTitles:NSLocalizedString(@"Type", @""),
-                                                                NSLocalizedString(@"Status", @""),
-                                                                NSLocalizedString(@"Planned start date",@""),
-                                                                NSLocalizedString(@"Sync status",@""),
-                                                                NSLocalizedString(@"Site",@""),
-                                                                nil];
+    if(self.menu == nil) {
+        self.sort = [JGActionSheetSection sectionWithTitle:@"Sort by"
+                                                            message:@"Project Status"
+                                                       buttonTitles:@[@"Type",
+                                                                      @"Status",
+                                                                      @"Start date",
+                                                                      @"Sync status",
+                                                                      @"Site",
+                                                                      @"Cancel"]
+                                                        buttonStyle:JGActionSheetButtonStyleDefault];
+        
+        [self.sort setButtonStyle:JGActionSheetButtonStyleDefault forButtonAtIndex:0];
+        [self.sort setButtonStyle:JGActionSheetButtonStyleDefault forButtonAtIndex:1];
+        [self.sort setButtonStyle:JGActionSheetButtonStyleDefault forButtonAtIndex:2];
+        [self.sort setButtonStyle:JGActionSheetButtonStyleDefault forButtonAtIndex:3];
+        [self.sort setButtonStyle:JGActionSheetButtonStyleDefault forButtonAtIndex:4];
+        [self.sort setButtonStyle:JGActionSheetButtonStyleRed forButtonAtIndex:5];
+        
+        NSArray *sections = @[self.sort];
+        self.menu = [JGActionSheet actionSheetWithSections: sections];
+        
+        //Assign delegate.
+        [self.menu setDelegate:self];
     }
-    [self.actionSheetShare showFromBarButtonItem:sender animated:YES];
-}
--(void)actionSheetCancel:(UIActionSheet *)actionSheet{
     
+    [self.menu showInView:self.view animated:YES];
 }
 
-- (void)actionSheet:(UIActionSheet *)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex{
-    [GASettings setSortBy: [NSString stringWithFormat: @"%d", (int)buttonIndex]];
-    [self updateActivityTableModel : [self.projects mutableCopy]];
+#pragma mark - JG Action Sheet menu action.
+
+- (void)actionSheet:(JGActionSheet *)actionSheet pressedButtonAtIndexPath:(NSIndexPath *)indexPath {
+    if((int)indexPath.row == 6) {
+    } else {
+        [GASettings setSortBy: [NSString stringWithFormat: @"%d", (int)indexPath.row]];
+        [self updateActivityTableModel : [self.projects mutableCopy]];
+    }
+    [actionSheet dismissAnimated:YES];
 }
+
 - (void)didReceiveMemoryWarning {
     [super didReceiveMemoryWarning];
     // Dispose of any resources that can be recreated.

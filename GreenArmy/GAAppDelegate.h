@@ -12,6 +12,7 @@
 #import "GASqlLiteDatabase.h"
 #import "GALogin.h"
 #import "GAEULAViewController.h"
+#import "GAUtil.h"
 
 @interface GAAppDelegate : UIResponder <UIApplicationDelegate, UIAlertViewDelegate>
 
@@ -24,6 +25,7 @@
 @property (nonatomic, retain) GASqlLiteDatabase *sqlLite;
 @property (nonatomic, retain) GALogin *loginViewController;
 @property (nonatomic, retain) GAEULAViewController * eulaVC;
+@property (nonatomic, retain) GAUtil *gaUtil;
 
 -(void) updateTableModelsAndViews : (NSMutableArray *) p;
 -(void) displaySigninPage;
