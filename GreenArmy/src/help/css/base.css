@@ -93,7 +93,7 @@ a:hover {
 /* =Template
 -------------------------------------------------------------- */
 #wrapper {
-    min-width:1024px;
+    
     margin:0 auto;
 }
 
@@ -102,7 +102,7 @@ a:hover {
 }
 
 .container {
-    width:1024px;
+    
     margin:0 auto;
     padding:2px 0;
 }
