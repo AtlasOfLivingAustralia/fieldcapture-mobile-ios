@@ -98,27 +98,11 @@
             activity.siteId = @"";
         
         [appDelegate.sqlLite insertOrUpdateActivity:activity : activity.projectId];
-        UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Message"
-                                                        message:@"Successfully saved the changes.\nWould you like to sync the changes?"
-                                                       delegate:self
-                                              cancelButtonTitle:@"Sync later"
-                                              otherButtonTitles:@"Sync now",nil];
-        [alert show];
-        
-    }
-    
-}
-
-#pragma mark UIAlertDelegate.
-- (void)alertView:(UIAlertView *)actionSheet didDismissWithButtonIndex:(NSInteger)buttonIndex {
-    GAAppDelegate *appDelegate = (GAAppDelegate *)[[UIApplication sharedApplication] delegate];
-    if(buttonIndex == 0) {
         //Refresh the app with the new data.
         NSMutableArray *p = [appDelegate.sqlLite loadProjectsAndActivities];
         [appDelegate updateTableModelsAndViews:p];
-        [appDelegate goBackToDetailViewController];
-    }else {
         [appDelegate uploadAndDownload:true];
+
     }
 }
 
