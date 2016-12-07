@@ -1,7 +1,11 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.iPad.XIB" version="3.0" toolsVersion="5056" systemVersion="13D65" targetRuntime="iOS.CocoaTouch.iPad" propertyAccessControl="none" useAutolayout="YES">
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.iPad.XIB" version="3.0" toolsVersion="11542" systemVersion="16B2555" targetRuntime="iOS.CocoaTouch.iPad" propertyAccessControl="none" useAutolayout="YES" colorMatched="YES">
+    <device id="ipad9_7" orientation="portrait">
+        <adaptation id="fullscreen"/>
+    </device>
     <dependencies>
-        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="3733"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="11524"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
         <placeholder placeholderIdentifier="IBFilesOwner" id="-1" userLabel="File's Owner" customClass="GAAboutVC">
@@ -14,36 +18,60 @@
             <rect key="frame" x="0.0" y="0.0" width="1024" height="768"/>
             <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
             <subviews>
-                <imageView userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" image="GreenArmy2.png" translatesAutoresizingMaskIntoConstraints="NO" id="YrH-Fs-Bk9">
-                    <rect key="frame" x="34" y="176" width="459" height="397"/>
-                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                </imageView>
-                <imageView userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" image="header.png" translatesAutoresizingMaskIntoConstraints="NO" id="Rlc-03-JPM">
-                    <rect key="frame" x="638" y="47" width="313" height="135"/>
-                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                </imageView>
-                <textView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" fixedFrame="YES" showsHorizontalScrollIndicator="NO" editable="NO" translatesAutoresizingMaskIntoConstraints="NO" id="msl-HR-m3F">
-                    <rect key="frame" x="585" y="176" width="419" height="372"/>
-                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                    <string key="text">The Green Army Programme is an Australian Government initiative providing young Australians with opportunities to develop skills, undertake training and gain experience in environmental and heritage conservation by participating in projects that generate real benefits for the environment.  For more information on the Green Army, go to: http://www.environment.gov.au/cleaner-environment/clean-land/green-army.
+                <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" alignment="top" spacing="40" translatesAutoresizingMaskIntoConstraints="NO" id="0us-KW-8Ct">
+                    <rect key="frame" x="299.5" y="143.5" width="425" height="481"/>
+                    <subviews>
+                        <stackView opaque="NO" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="60z-ZQ-byo">
+                            <rect key="frame" x="0.0" y="0.0" width="380" height="69"/>
+                            <subviews>
+                                <imageView userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="heading.png" translatesAutoresizingMaskIntoConstraints="NO" id="EdI-0b-CN0">
+                                    <rect key="frame" x="0.0" y="0.0" width="380" height="69"/>
+                                    <constraints>
+                                        <constraint firstAttribute="width" constant="380" id="W9m-X7-YY8"/>
+                                        <constraint firstAttribute="height" constant="69" id="lgL-QP-Zao"/>
+                                    </constraints>
+                                </imageView>
+                            </subviews>
+                        </stackView>
+                        <stackView opaque="NO" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="LNK-vN-Kcp">
+                            <rect key="frame" x="0.0" y="109" width="425" height="372"/>
+                            <subviews>
+                                <textView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" showsHorizontalScrollIndicator="NO" editable="NO" translatesAutoresizingMaskIntoConstraints="NO" id="msl-HR-m3F">
+                                    <rect key="frame" x="0.0" y="0.0" width="425" height="372"/>
+                                    <constraints>
+                                        <constraint firstAttribute="height" constant="372" id="9EF-cE-DEF"/>
+                                        <constraint firstAttribute="width" constant="425" id="pl1-4X-fdQ"/>
+                                    </constraints>
+                                    <mutableString key="text">The Green Army Programme is an Australian Government initiative providing young Australians with opportunities to develop skills, undertake training and gain experience in environmental and heritage conservation by participating in projects that generate real benefits for the environment.  For more information on the Green Army, go to: http://www.environment.gov.au/cleaner-environment/clean-land/green-army.
 
 The Green Army Programme app enables Green Army service providers to capture project activity data in the field, using an iPad (not available for iPhone). Data can be uploaded into the Department's online reporting tool (MERIT) once the device is connected to the internet.
 
 Prior to using the app, users must have an approved project plan in MERIT and a MERIT user log-in.  Visit https://fieldcapture.ala.org.au/ for more details on MERIT.
 
-</string>
-                    <color key="textColor" red="0.074509806930000005" green="0.34901961679999999" blue="0.25098040700000002" alpha="1" colorSpace="deviceRGB"/>
-                    <fontDescription key="fontDescription" type="system" pointSize="15"/>
-                    <textInputTraits key="textInputTraits" autocapitalizationType="sentences"/>
-                    <dataDetectorType key="dataDetectorTypes" phoneNumber="YES" link="YES" address="YES" calendarEvent="YES"/>
-                </textView>
+</mutableString>
+                                    <color key="textColor" red="0.072871983051300049" green="0.28351467847824097" blue="0.19197852909564972" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                                    <fontDescription key="fontDescription" type="system" pointSize="15"/>
+                                    <textInputTraits key="textInputTraits" autocapitalizationType="sentences"/>
+                                    <dataDetectorType key="dataDetectorTypes" phoneNumber="YES" link="YES" address="YES" calendarEvent="YES"/>
+                                </textView>
+                            </subviews>
+                        </stackView>
+                    </subviews>
+                </stackView>
             </subviews>
-            <simulatedStatusBarMetrics key="simulatedStatusBarMetrics"/>
-            <simulatedOrientationMetrics key="simulatedOrientationMetrics" orientation="landscapeRight"/>
+            <constraints>
+                <constraint firstItem="0us-KW-8Ct" firstAttribute="centerX" secondItem="i5M-Pr-FkT" secondAttribute="centerX" id="93U-WH-dUm"/>
+                <constraint firstItem="0us-KW-8Ct" firstAttribute="centerY" secondItem="i5M-Pr-FkT" secondAttribute="centerY" id="eLo-K2-7UK"/>
+            </constraints>
+            <freeformSimulatedSizeMetrics key="simulatedDestinationMetrics"/>
         </view>
     </objects>
     <resources>
-        <image name="GreenArmy2.png" width="1024" height="1024"/>
-        <image name="header.png" width="812" height="197"/>
+        <image name="heading.png" width="190" height="34"/>
     </resources>
+    <simulatedMetricsContainer key="defaultSimulatedMetrics">
+        <simulatedStatusBarMetrics key="statusBar"/>
+        <simulatedOrientationMetrics key="orientation"/>
+        <simulatedScreenMetrics key="destination"/>
+    </simulatedMetricsContainer>
 </document>
