@@ -192,6 +192,8 @@
         [self.menu setDelegate:self];
     }
     
+    // Fix to prevent menu disappearing from the screen.
+    [self.tableView scrollRectToVisible:CGRectMake(0, 0, 1, 1) animated:NO];
     [self.menu showInView:self.view animated:YES];
 }
 
