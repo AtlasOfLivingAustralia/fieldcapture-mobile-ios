@@ -875,7 +875,7 @@
 				ORGANIZATIONNAME = "Sathya Moorthy, Sathish (CSIRO IM&T, Clayton)";
 				TargetAttributes = {
 					E2E3AA8818F4D2940005BB9E = {
-						DevelopmentTeam = VS75428PD6;
+						DevelopmentTeam = VP6SGJQWPU;
 					};
 					E2E3AAA318F4D2940005BB9E = {
 						TestTargetID = E2E3AA8818F4D2940005BB9E;
@@ -1179,8 +1179,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "iPhone Developer: Sathish Sathyamoorthy (X53HL7Y98N)";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer: Sathish Sathyamoorthy (X53HL7Y98N)";
+				DEVELOPMENT_TEAM = VP6SGJQWPU;
 				ENABLE_NS_ASSERTIONS = NO;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "GreenArmy/GreenArmy-Prefix.pch";
@@ -1195,8 +1196,10 @@
 					"$(PROJECT_DIR)/GreenArmy/src/Framework",
 				);
 				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = au.org.ala.mobile.doe.GreenArmy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE = "";
+				PROVISIONING_PROFILE = "09dea711-c6dc-4d62-a827-283e33920ad2";
+				PROVISIONING_PROFILE_SPECIFIER = GreenArmyALAAccount;
 				WRAPPER_EXTENSION = app;
 			};
 			name = Debug;
@@ -1206,8 +1209,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
-				CODE_SIGN_IDENTITY = "iPhone Distribution: Department of Sustainability, Environment, Water, Population and Communities (Q8GMSB2GP2)";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution: Department of Sustainability, Environment, Water, Population and Communities (Q8GMSB2GP2)";
+				CODE_SIGN_IDENTITY = "iPhone Developer: Sathish Sathyamoorthy (X53HL7Y98N)";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer: Sathish Sathyamoorthy (X53HL7Y98N)";
+				DEVELOPMENT_TEAM = VP6SGJQWPU;
 				ENABLE_NS_ASSERTIONS = YES;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "GreenArmy/GreenArmy-Prefix.pch";
@@ -1217,8 +1221,10 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/GreenArmy/src/Framework",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = au.org.ala.mobile.doe.GreenArmy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE = "BB65262A-6196-407F-BE65-E69019234998";
+				PROVISIONING_PROFILE = "09dea711-c6dc-4d62-a827-283e33920ad2";
+				PROVISIONING_PROFILE_SPECIFIER = GreenArmyALAAccount;
 				WRAPPER_EXTENSION = app;
 			};
 			name = Release;
